@@ -1,0 +1,31 @@
+{
+  "threeJsInitialized": true,
+  "sceneObjectsCount": 190,
+  "targetsTotal": 0,
+  "nfzZonesTotal": 2,
+  "initialUI": {
+    "fsmStatus": "ON_GROUND",
+    "activeDroneName": "БПЛА-1 (Разведчик)",
+    "coords": "X:0.40 Y:0.40 Z:0.08м",
+    "speed": "0.00 м/с",
+    "targetsDiscovered": "0 / 10 ЦЕЛЕЙ",
+    "slamBadge": "ПОКРЫТИЕ: 0.0%"
+  },
+  "cameraTests": {},
+  "takeoffTest": {
+    "fsmStatus": "TAKEOFF",
+    "coords": "X:0.40 Y:0.40 Z:1.04м",
+    "reconZ": null,
+    "reconFsm": null
+  },
+  "droneSwitchTest": null,
+  "payloadTest": {
+    "activeDrone": "БПЛА-2 (Исполнитель)",
+    "payloadText": "ГОТОВ",
+    "payloadLedClass": "payload-indicator",
+    "execLedActive": null,
+    "execPayloadTimer": null
+  },
+  "pageErrors": [],
+  "consoleLogs": []
+}

@@ -1,0 +1,4165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D-симулятор двух БПЛА | Иннагрика 2026 (Агротех АТ11-2)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body {
+      background-color: #070b12;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #canvas3d {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Верхний Topbar */
+    .topbar {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    .topbar-right {
+      pointer-events: auto;
+    }
+
+    .brand-card {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 8px;
+      padding: 6px 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+    .brand-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.3px;
+    }
+    .brand-sub {
+      font-size: 10px;
+      color: #94a3b8;
+    }
+
+    .segmented-group {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      padding: 3px;
+      display: flex;
+      gap: 3px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+    .btn-seg {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 6px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+    }
+    .btn-seg:hover {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .btn-seg.active-recon {
+      background: rgba(234, 88, 12, 0.25);
+      color: #fdba74;
+      border: 1px solid #ea580c;
+    }
+    .btn-seg.active-exec {
+      background: rgba(34, 197, 94, 0.25);
+      color: #86efac;
+      border: 1px solid #22c55e;
+    }
+
+    .cam-group {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      padding: 3px;
+      display: flex;
+      gap: 2px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+    .btn-cam-mini {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 6px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-cam-mini:hover {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .btn-cam-mini.active {
+      background: #0284c7;
+      color: #fff;
+    }
+
+    .speed-group {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 8px;
+      padding: 3px;
+      display: flex;
+      gap: 2px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+    .btn-speed {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-speed:hover {
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+    }
+    .btn-speed.active {
+      background: #0284c7;
+      color: #fff;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+    }
+
+    .telemetry-card {
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 10px;
+      padding: 10px 14px;
+      width: 250px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+    .telemetry-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+      align-items: center;
+    }
+    .telemetry-label {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+    .telemetry-value {
+      font-weight: bold;
+      color: #38bdf8;
+    }
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    .badge-ok {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+      border: 1px solid #22c55e;
+    }
+
+    .altitude-track {
+      position: relative;
+      width: 100%;
+      height: 8px;
+      background: #1e293b;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 6px;
+      border: 1px solid #334155;
+    }
+    .corridor-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(34, 197, 94, 0.4);
+      border-left: 1px solid #22c55e;
+      border-right: 1px solid #22c55e;
+    }
+    .altitude-pointer {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: #38bdf8;
+      box-shadow: 0 0 6px #38bdf8;
+      transition: left 0.05s linear;
+    }
+
+    .nfz-warning-banner {
+      position: absolute;
+      top: 65px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(220, 38, 38, 0.94);
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #fff;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 20;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.8);
+      max-width: 650px;
+      text-align: center;
+    }
+
+    .mission-phase-banner {
+      position: absolute;
+      top: 105px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #38bdf8;
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #f1f5f9;
+      display: none;
+      z-index: 20;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+      text-align: center;
+      max-width: 620px;
+    }
+
+    .discovery-toast {
+      position: absolute;
+      top: 65px;
+      right: 14px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #38bdf8;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: none;
+      z-index: 25;
+      box-shadow: 0 4px 18px rgba(56, 189, 248, 0.4);
+      pointer-events: none;
+      transition: all 0.3s ease;
+    }
+
+    .hud-controls {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 10;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+    }
+    .btn {
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      background: #334155;
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+    .btn-chain {
+      background: linear-gradient(135deg, #0284c7, #15803d);
+      border-color: #38bdf8;
+      color: #fff;
+    }
+    .btn-chain:hover {
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+    }
+    .btn-primary {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #ffffff;
+    }
+    .btn-success {
+      background: #15803d;
+      border-color: #4ade80;
+      color: #ffffff;
+    }
+    .btn-active-toggle {
+      background: #0369a1;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+    .btn-icon {
+      padding: 7px 10px;
+      font-size: 13px;
+    }
+
+    .help-modal {
+      position: absolute;
+      bottom: 65px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 12px;
+      color: #cbd5e1;
+      display: none;
+      z-index: 20;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+      line-height: 1.6;
+      width: 320px;
+    }
+    .key-cap {
+      background: #334155;
+      color: #f8fafc;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: bold;
+      border: 1px solid #475569;
+      font-size: 11px;
+    }
+    .help-title {
+      font-weight: bold;
+      color: #38bdf8;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .help-close {
+      cursor: pointer;
+      color: #94a3b8;
+    }
+    .help-close:hover {
+      color: #fff;
+    }
+
+    .payload-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #475569;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    .payload-indicator.active {
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+    }
+  
+    /* --- 2D SLAM Minimap Card --- */
+    .slam-map-card {
+      position: absolute;
+      bottom: 74px;
+      left: 14px;
+      width: 324px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
+      z-index: 15;
+      user-select: none;
+      transition: opacity 0.2s ease;
+    }
+    .slam-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .slam-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .slam-pulse {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+      animation: pulseAnim 1.5s infinite;
+    }
+    @keyframes pulseAnim {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+    .slam-badge {
+      font-size: 10px;
+      font-weight: 700;
+      color: #4ade80;
+      background: rgba(34, 197, 94, 0.15);
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      font-family: monospace;
+    }
+    .slam-canvas-wrap {
+      width: 300px;
+      height: 200px;
+      background: #080d19;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+    #slamCanvas {
+      width: 300px;
+      height: 200px;
+      display: block;
+    }
+    .slam-legend {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 9px;
+      color: #94a3b8;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .legend-box {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+    .legend-box.unscanned { background: #0b1329; border: 1px solid #334155; }
+    .legend-box.scanned { background: #15803d; }
+    .legend-box.wall { background: #f59e0b; }
+    .legend-box.inside-nfz { background: #b91c1c; }
+
+    /* --- Motor Control RPM Panel --- */
+    .motor-panel {
+      position: absolute;
+      bottom: 74px;
+      right: 14px;
+      width: 334px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(234, 88, 12, 0.45);
+      border-radius: 10px;
+      padding: 10px 14px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
+      z-index: 15;
+      display: none;
+      user-select: none;
+    }
+    .motor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .motor-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fb923c;
+      letter-spacing: 0.4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .motor-close {
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1;
+    }
+    .motor-close:hover { color: #fff; }
+    .motor-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 5px;
+      font-size: 11px;
+      gap: 6px;
+    }
+    .motor-label {
+      width: 110px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .motor-slider {
+      flex: 1;
+      height: 5px;
+      accent-color: #ea580c;
+      cursor: pointer;
+    }
+    .motor-val {
+      width: 82px;
+      text-align: right;
+      font-family: monospace;
+      font-size: 10px;
+      color: #fdba74;
+    }
+    .motor-btn-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      margin-top: 8px;
+    }
+    .btn-mot {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      border-radius: 4px;
+      padding: 4px 2px;
+      font-size: 9px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .btn-mot:hover {
+      background: rgba(234, 88, 12, 0.25);
+      color: #fdba74;
+      border-color: #ea580c;
+    }
+    .motor-telemetry {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid rgba(148, 163, 184, 0.15);
+      font-family: monospace;
+      font-size: 9px;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }
+
+  
+    
+    /* Скрытие по умолчанию тяжелых панелей (чистый экран) */
+    .slam-map-card {
+      display: none; /* Скрыто по умолчанию */
+    }
+    .scene-legend-card {
+      display: none; /* Скрыто по умолчанию */
+      position: absolute;
+      top: 70px;
+      right: 14px;
+      width: 280px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 11px;
+      z-index: 25;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+    }
+    .legend-close {
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .legend-close:hover {
+      color: #f8fafc;
+    }
+
+    /* Компактный верхний бар пайплайна (без нагромождения) */
+    .mission-pipeline-card {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 20px;
+      padding: 4px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      z-index: 12;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+    }
+    .pipeline-steps-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pipe-step {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      padding: 3px 8px;
+      border-radius: 12px;
+      transition: all 0.25s ease;
+    }
+    .pipe-step.active {
+      color: #f8fafc;
+      background: rgba(56, 189, 248, 0.25);
+      border: 1px solid #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
+    }
+    .pipe-step.done {
+      color: #4ade80;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+    }
+    .pipe-arrow {
+      color: #475569;
+      font-size: 10px;
+    }
+    .pipeline-subtext {
+      font-size: 10px;
+      color: #94a3b8;
+      max-width: 480px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Убираем отдельный тяжелый mission-phase-banner */
+    .mission-phase-banner {
+      display: none !important;
+    }
+
+    /* Компактный Bottom Dock */
+    
+    /* --- ВЕРХНИЙ БАР (3-КОЛОНОЧНЫЙ FLEX БЕЗ НАЛОЖЕНИЙ) --- */
+    .topbar {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+      flex-shrink: 0;
+    }
+    .topbar-center {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+      pointer-events: auto;
+    }
+    .topbar-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      pointer-events: auto;
+      flex-shrink: 0;
+    }
+
+    /* Кнопки скорости: яркие, четкие и всегда на виду */
+    .speed-group {
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      border-radius: 8px;
+      padding: 3px;
+      display: flex;
+      gap: 2px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+    .btn-speed {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-speed:hover {
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+    }
+    .btn-speed.active {
+      background: #0284c7;
+      color: #ffffff;
+      box-shadow: 0 0 8px rgba(2, 132, 199, 0.6);
+    }
+
+    /* Пайплайн этапов по центру (в потоке flex, БЕЗ absolute) */
+    .mission-pipeline-card {
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 20px;
+      padding: 4px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    /* --- НИЖНИЙ ДОК: СТРОГО ВЫРОВНЕННЫЕ И ОДИНАКОВЫЕ КНОПКИ --- */
+    .hud-controls {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 12px;
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+      white-space: nowrap;
+    }
+    .btn {
+      height: 38px; /* Строго единая высота для всех кнопок! */
+      box-sizing: border-box;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      padding: 0 12px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      line-height: 1;
+      white-space: nowrap; /* Строго одна строка, никаких многострочных накладок! */
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      background: #334155;
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+    .btn-icon {
+      padding: 0 10px;
+      font-size: 13px;
+    }
+
+
+    .mission-pipeline-card {
+      position: absolute;
+      top: 66px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 10px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 12;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+      pointer-events: auto;
+    }
+    .pipe-step {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: all 0.3s ease;
+    }
+    .pipe-step.active {
+      color: #f8fafc;
+      background: rgba(56, 189, 248, 0.2);
+      border: 1px solid #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    .pipe-step.done {
+      color: #4ade80;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+    .pipe-arrow {
+      color: #475569;
+      font-size: 11px;
+    }
+
+    /* --- ИНТЕРАКТИВНАЯ ЛЕГЕНДА СЦЕНЫ (ПОЯСНЕНИЕ ВСЕХ ОБЪЕКТОВ) --- */
+    .scene-legend-card {
+      position: absolute;
+      top: 130px;
+      right: 14px;
+      width: 270px;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 11px;
+      z-index: 12;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .legend-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+    .legend-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .legend-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      line-height: 1.35;
+    }
+    .legend-icon-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .legend-row-text b {
+      color: #f1f5f9;
+    }
+    .legend-row-text span {
+      color: #94a3b8;
+      font-size: 10px;
+    }
+
+    /* 3D Label Toggle Pill */
+    .btn-toggle-pills {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-toggle-pills.active {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+
+</style>
+  <script src="three.min.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+    }
+  </script>
+  <script src="OrbitControls.js"></script>
+  <script>
+    if (typeof THREE !== 'undefined' && typeof THREE.OrbitControls === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas3d"></div>
+
+  <!-- Верхний Topbar -->
+  <div class="topbar">
+    <!-- ЛЕВАЯ ЧАСТЬ: Бренд + Камеры + СКОРОСТЬ (всегда на виду, без перекрытий!) -->
+    <div class="topbar-left">
+      <div class="brand-card">
+        <div class="brand-title">ИННАГРИКА 2026</div>
+        <div class="brand-sub">Полигон 6 × 4 м</div>
+      </div>
+
+      <div class="cam-group">
+        <button class="btn-cam-mini" id="camOrbit" title="Общий 3D-вид полигона">📐 3D Поле</button>
+        <button class="btn-cam-mini active" id="camTrack" title="Слежение за дроном">🎯 Слежение</button>
+        <button class="btn-cam-mini" id="camTop" title="Вид сверху 2D">🗺️ 2D</button>
+        <button class="btn-cam-mini" id="camFpv" title="Камера дрона">📷 FPV</button>
+      </div>
+
+      <div class="speed-group" title="Скорость симуляции">
+        <button class="btn-speed active" id="spd1">1×</button>
+        <button class="btn-speed" id="spd2">2×</button>
+        <button class="btn-speed" id="spd4">4×</button>
+        <button class="btn-speed" id="spd8">8×</button>
+      </div>
+    </div>
+
+    <!-- ЦЕНТРАЛЬНАЯ ЧАСТЬ: Шаги миссии ТЗ (в потоке flex, НИКАКИХ наложений!) -->
+    <div class="topbar-center">
+      <div class="mission-pipeline-card" id="missionPipeline">
+        <div class="pipeline-steps-row">
+          <div class="pipe-step active" id="pipe1">
+            <span>🔍 1. Разведка</span>
+          </div>
+          <span class="pipe-arrow">➔</span>
+          <div class="pipe-step" id="pipe2">
+            <span>🛡️ 2. Валидация</span>
+          </div>
+          <span class="pipe-arrow">➔</span>
+          <div class="pipe-step" id="pipe3">
+            <span>🎯 3. Обработка (6)</span>
+          </div>
+          <span class="pipe-arrow">➔</span>
+          <div class="pipe-step" id="pipe4">
+            <span>🏁 4. Финиш</span>
+          </div>
+        </div>
+        <div class="pipeline-subtext" id="pipelineSubtext">Ожидание команды оператора · Нажмите «⚡ Запуск цепочки»</div>
+      </div>
+    </div>
+
+    <!-- ПРАВАЯ ЧАСТЬ: Выбор дрона + Телеметрия -->
+    <div class="topbar-right">
+      <div class="segmented-group">
+        <button class="btn-seg active-recon" id="selectRecon">
+          🚁 БПЛА-1
+        </button>
+        <button class="btn-seg" id="selectExec">
+          🛸 БПЛА-2
+        </button>
+      </div>
+      <div class="telemetry-card">
+        <div class="telemetry-row">
+          <span class="telemetry-label">АКТИВНЫЙ БОPT:</span>
+          <span class="telemetry-value" id="activeDroneName" style="color:#fdba74;">БПЛА-1 (Разведчик)</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">FSM СТАТУС:</span>
+          <span class="badge badge-ok" id="fsmStatus">READY</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">ПОЗИЦИЯ:</span>
+          <span class="telemetry-value" id="coordsValue">X:0.40 Y:0.40 Z:0.08м</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">СКОРОСТЬ:</span>
+          <span class="telemetry-value" id="speedValue">0.00 м/с</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">РАЗВЕДКА КАРТЫ:</span>
+          <span class="telemetry-value" id="targetsDiscoveredValue" style="color:#38bdf8;">0 / 10 ЦЕЛЕЙ</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-label">ОБОРУДОВАНИЕ:</span>
+          <span class="telemetry-value">
+            <span class="payload-indicator" id="payloadLed"></span>
+            <span id="payloadText">ГОТОВ</span>
+          </span>
+        </div>
+        <div class="altitude-track" title="Допустимый коридор высоты: 1.0 - 1.4 м">
+          <div class="corridor-marker" style="left: 50%; width: 20%;"></div>
+          <div class="altitude-pointer" id="altPointer" style="left: 4%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Интерактивная легенда объектов сцены -->
+  <div class="scene-legend-card" id="sceneLegend">
+    <div class="legend-title">
+      <span>📋 ОБЪЕКТЫ ПО ТЗ (Справка)</span>
+      <span class="legend-close" id="legendCloseBtn">&times;</span>
+    </div>
+    <div class="legend-list" id="legendList">
+      <div class="legend-row">
+        <span class="legend-icon-badge" style="background: rgba(234, 88, 12, 0.3); color: #fb923c;">🎯</span>
+        <div class="legend-row-text">
+          <b>Очаг A (6 шт)</b><br>
+          <span>Сорняк / болезнь. Требуется световая обработка 2.0с (R=0.25м).</span>
+        </div>
+      </div>
+      <div class="legend-row">
+        <span class="legend-icon-badge" style="background: rgba(239, 68, 68, 0.3); color: #f87171;">🚫</span>
+        <div class="legend-row-text">
+          <b>Очаг A в NFZ (2 шт)</b><br>
+          <span>Сорняк в опасной зоне. По ТЗ полёт и обработка строго ЗАПРЕЩЕНЫ.</span>
+        </div>
+      </div>
+      <div class="legend-row">
+        <span class="legend-icon-badge" style="background: rgba(59, 130, 246, 0.3); color: #60a5fa;">🌿</span>
+        <div class="legend-row-text">
+          <b>Участок B (1 шт)</b><br>
+          <span>Здоровая культура (томаты). Только наблюдение, без химии.</span>
+        </div>
+      </div>
+      <div class="legend-row">
+        <span class="legend-icon-badge" style="background: rgba(168, 85, 247, 0.3); color: #c084fc;">❓</span>
+        <div class="legend-row-text">
+          <b>Участок U (1 шт)</b><br>
+          <span>Неопределенный спектр. Пропуск для исключения брака.</span>
+        </div>
+      </div>
+      <div class="legend-row">
+        <span class="legend-icon-badge" style="background: rgba(239, 68, 68, 0.3); color: #ef4444;">⛔</span>
+        <div class="legend-row-text">
+          <b>Запретные зоны NFZ</b><br>
+          <span>Шкаф автоматики и метеомачта. Влет запрещен (+0.23м буфер).</span>
+        </div>
+      </div>
+      <div class="legend-row">
+        <span class="legend-icon-badge" style="background: rgba(34, 197, 94, 0.3); color: #4ade80;">💡</span>
+        <div class="legend-row-text">
+          <b>Агрооперация (LED 2с)</b><br>
+          <span>Включение светодиода на 2.0с на высоте 1.0–1.4 м.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="discovery-toast" id="discoveryToast">📷 Обнаружен объект</div>
+
+  <div class="nfz-warning-banner" id="nfzBanner">
+    <span id="bannerText">🚨 ЗАПРЕТНАЯ ЗОНА (NFZ): БАРЬЕР АКТИВЕН. ВЛЕТ ЗАБЛОКИРОВАН</span>
+  </div>
+
+  <div class="mission-phase-banner" id="phaseBanner">
+    <div id="phaseText">ФАЗА 1: РАЗВЕДКА ПОСЕВОВ</div>
+  </div>
+
+  <div class="help-modal" id="helpModal">
+    <div class="help-title">
+      <span>УПРАВЛЕНИЕ С КЛАВИАТУРЫ</span>
+      <span class="help-close" id="helpClose">&times;</span>
+    </div>
+    <div><span class="key-cap">W</span> <span class="key-cap">S</span> — Полет вперед / назад (по курсу носа)</div>
+    <div><span class="key-cap">A</span> <span class="key-cap">D</span> или <span class="key-cap">←</span> <span class="key-cap">→</span> — Разворот носа влево / вправо (Рыскание / Yaw)</div>
+    <div><span class="key-cap">Space</span> <span class="key-cap">Shift</span> (или <span class="key-cap">Q</span> <span class="key-cap">E</span>) — Вверх / Вниз (ось Z)</div>
+    <div><span class="key-cap">Z</span> <span class="key-cap">C</span> — Боковой крен / стрейф влево-вправо</div>
+    <div><span class="key-cap">L</span> — Тест светодиода (2.0 с, только БПЛА-2)</div>
+    <div style="margin-top:6px; color:#38bdf8;">🖱️ <b>Зажмите ЛКМ</b> для вращения камеры вокруг дрона</div>
+  </div>
+
+    <!-- 2D SLAM Minimap -->
+  <div class="slam-map-card" id="slamMapCard">
+    <div class="slam-header">
+      <div class="slam-title">
+        <span class="slam-pulse"></span>
+        <span>2D КАРТА ОБСЛЕДОВАНИЯ (SLAM)</span>
+      </div>
+      <span class="slam-badge" id="slamCoverageBadge">ПОКРЫТИЕ: 0.0%</span>
+    </div>
+    <div class="slam-canvas-wrap">
+      <canvas id="slamCanvas" width="300" height="200"></canvas>
+    </div>
+    <div class="slam-legend">
+      <span class="legend-item"><span class="legend-box unscanned"></span> Туман</span>
+      <span class="legend-item"><span class="legend-box scanned"></span> Чисто</span>
+      <span class="legend-item"><span class="legend-box wall"></span> Стена</span>
+      <span class="legend-item"><span class="legend-box inside-nfz"></span> Стена внутри</span>
+    </div>
+  </div>
+
+  <!-- Motor RPM Control Panel -->
+  <div class="motor-panel" id="motorPanel">
+    <div class="motor-header">
+      <div class="motor-title">🎛️ МИКШЕР 4 МОТОРОВ (RPM / 6-DOF)</div>
+      <span class="motor-close" id="motorCloseBtn">&times;</span>
+    </div>
+    <div class="motor-row">
+      <span class="motor-label" style="color:#fdba74;">M1 (Перед-Л CCW)</span>
+      <input type="range" min="0" max="100" value="0" class="motor-slider" id="m1Slider">
+      <span class="motor-val" id="m1Val">0% (0)</span>
+    </div>
+    <div class="motor-row">
+      <span class="motor-label" style="color:#fdba74;">M2 (Перед-П CW)</span>
+      <input type="range" min="0" max="100" value="0" class="motor-slider" id="m2Slider">
+      <span class="motor-val" id="m2Val">0% (0)</span>
+    </div>
+    <div class="motor-row">
+      <span class="motor-label" style="color:#38bdf8;">M3 (Зад-П CCW)</span>
+      <input type="range" min="0" max="100" value="0" class="motor-slider" id="m3Slider">
+      <span class="motor-val" id="m3Val">0% (0)</span>
+    </div>
+    <div class="motor-row">
+      <span class="motor-label" style="color:#38bdf8;">M4 (Зад-Л CW)</span>
+      <input type="range" min="0" max="100" value="0" class="motor-slider" id="m4Slider">
+      <span class="motor-val" id="m4Val">0% (0)</span>
+    </div>
+    <div class="motor-btn-grid">
+      <button class="btn-mot" id="btnHover50">⚖️ Висение 50%</button>
+      <button class="btn-mot" id="btnThrotUp">⬆️ Газ +5%</button>
+      <button class="btn-mot" id="btnThrotDn">⬇️ Газ -5%</button>
+      <button class="btn-mot" id="btnStopMotors" style="color:#f87171;">🛑 Стоп 0%</button>
+      <button class="btn-mot" id="btnNoseDown">🔼 Вперед</button>
+      <button class="btn-mot" id="btnNoseUp">🔽 Назад</button>
+      <button class="btn-mot" id="btnRollL">◀️ Крен Л</button>
+      <button class="btn-mot" id="btnRollR">▶️ Крен П</button>
+    </div>
+    <div class="motor-telemetry">
+      <span id="motorThrustVal">Тяга Fz: 0.00 Н</span>
+      <span id="motorTorqueVal">Углы: 0.0° / 0.0°</span>
+    </div>
+  </div>
+
+  <div class="hud-controls">
+    <button class="btn btn-chain" id="btnRunChain" title="Автоматический запуск полной миссии ТЗ">⚡ Запуск цепочки ТЗ</button>
+    <button class="btn btn-primary" id="btnTakeoff">🚀 Взлет (1.2м)</button>
+    <button class="btn" id="btnLand">🛬 Посадка</button>
+    <button class="btn btn-success" id="btnPayload">💡 Тест LED (2с)</button>
+    <button class="btn" id="btnToggleSlam">🗺️ SLAM</button>
+    <button class="btn" id="btnToggleLegend">📋 Справка ТЗ</button>
+    <button class="btn" id="btnToggleLabels">🏷️ 3D-Метки</button>
+    <button class="btn" id="btnRandomize" title="Сгенерировать случайные препятствия NFZ и цели">🎲 Новая карта (NFZ и цели)</button>
+    <button class="btn" id="btnReset">🔄 Сброс</button>
+    <button class="btn btn-icon" id="btnHelp" title="Подсказка управления">⌨️</button>
+  </div>
+
+  <script>
+    const FIELD_WIDTH = 6.0;
+    const FIELD_HEIGHT = 4.0;
+    const NOMINAL_ALT = 1.2;
+    const MAX_SPEED = 0.4;
+    const ALT_MIN = 1.0;
+    const ALT_MAX = 1.4;
+    const BUFFER_INFLATION = 0.23;
+    const DRONE_RADIUS = 0.10;
+    const DRONE_COLLISION_DIST = 0.35;
+
+    let simSpeed = 1.0;
+    let chainRunning = false;
+    let chainStage = 0;
+    let activeDroneId = 1;
+
+    const nfzZones = [
+      {
+        id: 1,
+        cx: 2.6, cy: 2.1,
+        w: 1.2, h: 1.0,
+        name: "NFZ-1 (Центральный узел)"
+      },
+      {
+        id: 2,
+        cx: 4.4, cy: 1.40,
+        w: 0.8, h: 0.8,
+        name: "NFZ-2 (Оросительный модуль)"
+      }
+    ];
+
+    nfzZones.forEach(z => {
+      z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
+      z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
+      z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
+      z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
+    });
+
+    const NFZ_MAX_Z = 2.5;
+
+    const container = document.getElementById('canvas3d');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x070b12);
+    scene.fog = new THREE.FogExp2(0x070b12, 0.035);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.up.set(0, 0, 1);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    controls.minDistance = 0.3;
+    controls.maxDistance = 15;
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    sunLight.position.set(4, 1, 7);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 15;
+    sunLight.shadow.camera.left = -5;
+    sunLight.shadow.camera.right = 5;
+    sunLight.shadow.camera.top = 5;
+    sunLight.shadow.camera.bottom = -5;
+    scene.add(sunLight);
+
+    const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.3);
+    fillLight.position.set(-2, 3, 4);
+    scene.add(fillLight);
+
+    // =========================================================================
+    // 1. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ: ТЕКСТУРЫ И 3D-ПОДПИСИ (THREE.Sprite)
+    // =========================================================================
+    let labelsVisible = true;
+    const allSceneLabels = [];
+
+    // Аккуратный микро-пин над целевыми участками (компактный и не заслоняющий сцену)
+    function createMicroPin(label, colorHex, icon = '🎯') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 54;
+      const ctx = canvas.getContext('2d');
+
+      function drawPin(lbl, col, ico) {
+        ctx.clearRect(0, 0, 160, 54);
+
+        // Капсульная подложка
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(4, 4, 152, 46, 23);
+        } else {
+          ctx.rect(4, 4, 152, 46);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        // Текст микро-пина
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${ico} ${lbl}`, 80, 27);
+      }
+
+      drawPin(label, colorHex, icon);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.LinearFilter;
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthTest: true, // ВАЖНО: не перекрывает объекты на переднем плане!
+        depthWrite: false
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(0.24, 0.08, 1.0); // Маленький масштаб в мировых координатах
+
+      sprite.update = (newLabel, newCol, newIco) => {
+        drawPin(newLabel, newCol, newIco);
+        tex.needsUpdate = true;
+      };
+
+      allSceneLabels.push(sprite);
+      sprite.visible = labelsVisible;
+      return sprite;
+    }
+
+    // Процедурная текстура почвы (чернозем с органической зернистостью и бороздками)
+    function createSoilTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#261b12'; // Темный органический грунт
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Зернистость почвы и комья земли
+      for (let i = 0; i < 3500; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const r = Math.random() * 2.2 + 0.4;
+        const b = Math.floor(Math.random() * 30);
+        ctx.fillStyle = `rgb(${34 + b}, ${24 + b * 0.8}, ${16 + b * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Агрономические продольные борозды
+      ctx.strokeStyle = 'rgba(15, 9, 5, 0.45)';
+      ctx.lineWidth = 3.5;
+      for (let y = 16; y < 512; y += 32) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(512, y);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(6, 4);
+      return tex;
+    }
+
+    // Текстура желто-черной сигнальной ленты / зебры безопасности
+    function createHazardTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#eab308';
+      ctx.fillRect(0, 0, 256, 64);
+
+      ctx.fillStyle = '#0f172a';
+      const stripeW = 24;
+      for (let x = -64; x < 320; x += stripeW * 2) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + stripeW, 0);
+        ctx.lineTo(x + stripeW - 32, 64);
+        ctx.lineTo(x - 32, 64);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(4, 1);
+      return tex;
+    }
+
+    // =========================================================================
+    // 2. АГРОНОМИЧЕСКОЕ ПОЛЕ, ГРЯДКИ И ПОСЕВЫ КУЛЬТУР
+    // =========================================================================
+    const floorGeo = new THREE.PlaneGeometry(FIELD_WIDTH, FIELD_HEIGHT);
+    const floorMat = new THREE.MeshStandardMaterial({
+      map: createSoilTexture(),
+      roughness: 0.92,
+      metalness: 0.08
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.position.set(FIELD_WIDTH / 2, FIELD_HEIGHT / 2, 0);
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Грядки посевов (приподнятые земляные гряды вдоль полигона)
+    const bedMat = new THREE.MeshStandardMaterial({
+      color: 0x332216,
+      roughness: 0.95
+    });
+    for (let y = 0.35; y < FIELD_HEIGHT; y += 0.42) {
+      const bed = new THREE.Mesh(new THREE.BoxGeometry(FIELD_WIDTH - 0.2, 0.26, 0.015), bedMat);
+      bed.position.set(FIELD_WIDTH / 2, y, 0.008);
+      bed.receiveShadow = true;
+      scene.add(bed);
+
+      // Ровные ряды всходов рассады культурных растений
+      for (let x = 0.35; x < FIELD_WIDTH - 0.25; x += 0.34) {
+        // Пропускаем места стартовых площадок и шкафов NFZ
+        if ((x < 0.9 && y < 1.6) || (x > 2.0 && x < 3.2 && y > 1.6 && y < 2.6) || (x > 3.9 && x < 4.9 && y > 0.9 && y < 1.9)) continue;
+        const sprout = new THREE.Mesh(
+          new THREE.ConeGeometry(0.024, 0.045, 5),
+          new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.7 })
+        );
+        sprout.rotation.x = Math.PI / 2;
+        sprout.position.set(x + (Math.random() - 0.5) * 0.03, y + (Math.random() - 0.5) * 0.02, 0.025);
+        scene.add(sprout);
+      }
+    }
+
+    // =========================================================================
+    // 3. КООРДИНАТНАЯ РАЗМЕТКА ПОЛЯ F (6 × 4 м) И НАЧАЛО КООРДИНАТ (0,0)
+    // =========================================================================
+    // Бело-желтый бордюр полигона
+    const borderPoints = [
+      new THREE.Vector3(0, 0, 0.015),
+      new THREE.Vector3(FIELD_WIDTH, 0, 0.015),
+      new THREE.Vector3(FIELD_WIDTH, FIELD_HEIGHT, 0.015),
+      new THREE.Vector3(0, FIELD_HEIGHT, 0.015),
+      new THREE.Vector3(0, 0, 0.015)
+    ];
+    const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPoints);
+    const borderLine = new THREE.Line(borderGeo, new THREE.LineBasicMaterial({ color: 0xfacc15, linewidth: 3 }));
+    scene.add(borderLine);
+
+    // Метрические деления и метки по осям X (0..6м) и Y (0..4м)
+    for (let x = 1.0; x <= FIELD_WIDTH; x += 1.0) {
+      const tick = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.02, 0.12),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+      );
+      tick.position.set(x, 0.06, 0.016);
+      scene.add(tick);
+    }
+    for (let y = 1.0; y <= FIELD_HEIGHT; y += 1.0) {
+      const tick = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.12, 0.02),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+      );
+      tick.position.set(0.06, y, 0.016);
+      scene.add(tick);
+    }
+
+    // Начало координат поля F в углу (0,0,0)
+    const axesHelper = new THREE.AxesHelper(1.2);
+    axesHelper.position.set(0, 0, 0.02);
+    scene.add(axesHelper);
+
+    
+
+    // =========================================================================
+    // 4. ОГРАЖДЕННАЯ ЗОНА ДЛЯ ПОЛЕТОВ (ЛЕТНЫЙ КУПОЛ 6 × 4 × 2.5 м)
+    // =========================================================================
+    // 4 угловые алюминиевые ферменные стойки ограждения
+    const trussMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
+    const cornerPosts = [
+      { x: 0, y: 0 },
+      { x: FIELD_WIDTH, y: 0 },
+      { x: FIELD_WIDTH, y: FIELD_HEIGHT },
+      { x: 0, y: FIELD_HEIGHT }
+    ];
+    cornerPosts.forEach(cp => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.5, 12), trussMat);
+      post.rotation.x = Math.PI / 2;
+      post.position.set(cp.x, cp.y, 1.25);
+      scene.add(post);
+
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.04), trussMat);
+      foot.position.set(cp.x, cp.y, 0.02);
+      scene.add(foot);
+    });
+
+    // Верхний пояс ферм по периметру на высоте 2.5 м
+    const topPerimeterPoints = [
+      new THREE.Vector3(0, 0, 2.5),
+      new THREE.Vector3(FIELD_WIDTH, 0, 2.5),
+      new THREE.Vector3(FIELD_WIDTH, FIELD_HEIGHT, 2.5),
+      new THREE.Vector3(0, FIELD_HEIGHT, 2.5),
+      new THREE.Vector3(0, 0, 2.5)
+    ];
+    const topPerimeterGeo = new THREE.BufferGeometry().setFromPoints(topPerimeterPoints);
+    const topPerimeterLine = new THREE.Line(topPerimeterGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 }));
+    scene.add(topPerimeterLine);
+
+    // Защитная сетка ограждения (Safety Netting wireframe, прозрачность 0.14)
+    const cageGeo = new THREE.BoxGeometry(FIELD_WIDTH, FIELD_HEIGHT, 2.5);
+    const cageEdges = new THREE.EdgesGeometry(cageGeo);
+    const cageLine = new THREE.LineSegments(cageEdges, new THREE.LineBasicMaterial({
+      color: 0x38bdf8,
+      opacity: 0.28,
+      transparent: true
+    }));
+    cageLine.position.set(FIELD_WIDTH / 2, FIELD_HEIGHT / 2, 1.25);
+    scene.add(cageLine);
+
+    // Табличка зоны соревнований на ограждении
+    
+
+    // =========================================================================
+    // 5. СТАРТОВЫЕ ПЛОЩАДКИ (HOME-1 И HOME-2)
+    // =========================================================================
+    function createHelipad(x, y, label, sub, colorHex, icon, isExec = false) {
+      const padGroup = new THREE.Group();
+      padGroup.position.set(x, y, 0.015);
+
+      // Приподнятая база площадки
+      const baseMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.38, 0.40, 0.02, 32),
+        new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 })
+      );
+      baseMesh.rotation.x = Math.PI / 2;
+      padGroup.add(baseMesh);
+
+      // Внутренний круг с маркировкой
+      const circleMesh = new THREE.Mesh(
+        new THREE.CircleGeometry(0.32, 32),
+        new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.4 })
+      );
+      circleMesh.position.z = 0.012;
+      padGroup.add(circleMesh);
+
+      // Белое кольцо разметки
+      const ringMesh = new THREE.Mesh(
+        new THREE.RingGeometry(0.24, 0.26, 32),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+      );
+      ringMesh.position.z = 0.014;
+      padGroup.add(ringMesh);
+
+      // Буква "H" в центре площадки
+      const hStemL = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.18), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      hStemL.position.set(-0.06, 0, 0.015);
+      padGroup.add(hStemL);
+      const hStemR = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.18), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      hStemR.position.set(0.06, 0, 0.015);
+      padGroup.add(hStemR);
+      const hCross = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.03), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      hCross.position.set(0, 0, 0.015);
+      padGroup.add(hCross);
+
+      // 4 угловых посадочных огня (Runway LEDs)
+      const ledMat = new THREE.MeshBasicMaterial({ color: colorHex });
+      [
+        { lx:  0.30, ly:  0.30 },
+        { lx: -0.30, ly:  0.30 },
+        { lx:  0.30, ly: -0.30 },
+        { lx: -0.30, ly: -0.30 }
+      ].forEach(lp => {
+        const led = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), ledMat);
+        led.position.set(lp.lx, lp.ly, 0.02);
+        padGroup.add(led);
+      });
+
+      // Рядом с H-1: вышка наземной базовой станции RTK
+      if (!isExec) {
+        const rtkPole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.35, 8), trussMat);
+        rtkPole.rotation.x = Math.PI / 2;
+        rtkPole.position.set(-0.35, 0, 0.17);
+        padGroup.add(rtkPole);
+
+        const rtkPuck = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 16), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
+        rtkPuck.rotation.x = Math.PI / 2;
+        rtkPuck.position.set(-0.35, 0, 0.35);
+        padGroup.add(rtkPuck);
+      } else {
+        // Рядом с H-2: заправочная емкость биопрепарата (IBC-контейнер)
+        const tankBox = new THREE.Mesh(
+          new THREE.BoxGeometry(0.14, 0.14, 0.18),
+          new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.3, transparent: true, opacity: 0.85 })
+        );
+        tankBox.position.set(-0.38, 0, 0.09);
+        padGroup.add(tankBox);
+
+        const tankCap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.02, 12), new THREE.MeshBasicMaterial({ color: 0x15803d }));
+        tankCap.rotation.x = Math.PI / 2;
+        tankCap.position.set(-0.38, 0, 0.19);
+        padGroup.add(tankCap);
+      }
+
+      scene.add(padGroup);
+
+      // 3D-плавающая вывеска над площадкой
+      
+    }
+
+    createHelipad(0.40, 0.40, 'БАЗА 1: РАЗВЕДЧИК', 'Старт/посадка БПЛА-1 (Фотосъемка)', '#ea580c', '🚁', false);
+    createHelipad(0.40, 1.20, 'БАЗА 2: ИСПОЛНИТЕЛЬ', 'Старт/посадка БПЛА-2 (Внесение препарата)', '#15803d', '🛸', true);
+
+    // =========================================================================
+    // 6. ТЕХНИЧЕСКОЕ ОБОРУДОВАНИЕ В ЗАПРЕТНЫХ ЗОНАХ (NFZ)
+    // =========================================================================
+    const nfzMeshes = [];
+    const hazardTex = createHazardTexture();
+
+    // NFZ-1: Шкаф автоматики климат-контроля и полива (в центре cx=2.6, cy=2.1)
+    const z1 = nfzZones[0];
+    const cabGroup = new THREE.Group();
+    cabGroup.position.set(z1.cx, z1.cy, 0);
+
+    // Металлический промышленный шкаф автоматики
+    const cabMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.35 });
+    const cabMesh = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.55, 1.10), cabMat);
+    cabMesh.position.set(0, 0, 0.55);
+    cabMesh.castShadow = true;
+    cabGroup.add(cabMesh);
+
+    // Сенсорный экран статуса
+    const screenMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.25, 0.16),
+      new THREE.MeshBasicMaterial({ color: 0x0284c7 })
+    );
+    screenMesh.position.set(0, -0.28, 0.75);
+    cabGroup.add(screenMesh);
+
+    // Желто-черная полоса предупреждения на шкафу
+    const hazBand = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.68, 0.12),
+      new THREE.MeshStandardMaterial({ map: hazardTex })
+    );
+    hazBand.position.set(0, -0.28, 0.20);
+    cabGroup.add(hazBand);
+
+    // Желтый проблесковый маячок на шкафу (мигает в animate)
+    const beaconLight = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.08, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfacc15 })
+    );
+    beaconLight.rotation.x = Math.PI / 2;
+    beaconLight.position.set(0, 0, 1.15);
+    cabGroup.add(beaconLight);
+
+    // 4 защитных полосатых столбика по углам зоны
+    const bollardMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.5 });
+    [
+      { bx:  z1.w / 2 - 0.05, by:  z1.h / 2 - 0.05 },
+      { bx: -z1.w / 2 + 0.05, by:  z1.h / 2 - 0.05 },
+      { bx:  z1.w / 2 - 0.05, by: -z1.h / 2 + 0.05 },
+      { bx: -z1.w / 2 + 0.05, by: -z1.h / 2 + 0.05 }
+    ].forEach(bp => {
+      const bCol = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.8, 10), bollardMat);
+      bCol.rotation.x = Math.PI / 2;
+      bCol.position.set(bp.bx, bp.by, 0.40);
+      cabGroup.add(bCol);
+    });
+
+    scene.add(cabGroup);
+    z1.group = cabGroup;
+
+    // NFZ-2: Метеорологическая мачта и гидронасос (cx=4.4, cy=1.4)
+    const z2 = nfzZones[1];
+    const mastGroup = new THREE.Group();
+    mastGroup.position.set(z2.cx, z2.cy, 0);
+    z2.group = mastGroup;
+
+    // Насосная гидростанция (синий бак давления)
+    const pumpTank = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.18, 0.45, 16),
+      new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.6, roughness: 0.3 })
+    );
+    pumpTank.rotation.x = Math.PI / 2;
+    pumpTank.position.set(-0.12, 0, 0.25);
+    mastGroup.add(pumpTank);
+
+    // Вертикальная метеомачта
+    const mastPole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.8, 8), trussMat);
+    mastPole.rotation.x = Math.PI / 2;
+    mastPole.position.set(0.15, 0, 0.90);
+    mastGroup.add(mastPole);
+
+    // Анемометр на вершине мачты
+    const anemometerHead = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), trussMat);
+    anemometerHead.position.set(0.15, 0, 1.82);
+    mastGroup.add(anemometerHead);
+
+    scene.add(mastGroup);
+
+    // Красные световые защитные призмы NFZ и желтые буферы безопасности (+0.23м)
+    nfzZones.forEach((z, idx) => {
+      const geo = new THREE.BoxGeometry(z.w, z.h, NFZ_MAX_Z);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xef4444,
+        transparent: true,
+        opacity: 0.26,
+        roughness: 0.2
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(z.cx, z.cy, NFZ_MAX_Z / 2);
+      scene.add(mesh);
+      z.mesh = mesh;
+      nfzMeshes.push({ data: z, mesh: mesh });
+
+      // Буфер безопасности (+0.23 м: БПЛА 0.10 + запас 0.05 + погрешность 0.08)
+      const bGeo = new THREE.BoxGeometry(z.w + 2 * BUFFER_INFLATION, z.h + 2 * BUFFER_INFLATION, NFZ_MAX_Z);
+      const bEdges = new THREE.EdgesGeometry(bGeo);
+      const bLine = new THREE.LineSegments(bEdges, new THREE.LineDashedMaterial({
+        color: 0xfacc15,
+        dashSize: 0.08,
+        gapSize: 0.04,
+        linewidth: 2
+      }));
+      bLine.computeLineDistances();
+      bLine.position.set(z.cx, z.cy, NFZ_MAX_Z / 2);
+      scene.add(bLine);
+      z.bLine = bLine;
+
+      // 3D-вывеска запретной зоны
+      
+    });
+
+    // =========================================================================
+    // 7. ГЕНЕРАТОР 3D-МОДЕЛЕЙ РАСТЕНИЙ ПО КЛАССАМ ТЗ (A, B, U)
+    // =========================================================================
+    function buildPlantModel(type) {
+      const pGroup = new THREE.Group();
+
+      if (type === 'A' || type === 'A_NFZ') {
+        // СОРНЯК / ОЧАГ БОЛЕЗНИ (раскидистый сорняк с пятнистыми буро-желтыми больными листьями)
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x4d5320, roughness: 0.85 });
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.12, 8), stemMat);
+        stem.rotation.x = Math.PI / 2;
+        stem.position.z = 0.06;
+        pGroup.add(stem);
+
+        const leafGeo = new THREE.PlaneGeometry(0.07, 0.026);
+        const leafMatBlight = new THREE.MeshStandardMaterial({
+          color: 0xca8a04, // желто-бурый пораженный цвет
+          side: THREE.DoubleSide,
+          roughness: 0.8
+        });
+        const leafMatWeed = new THREE.MeshStandardMaterial({
+          color: 0x65a30d,
+          side: THREE.DoubleSide,
+          roughness: 0.8
+        });
+
+        for (let i = 0; i < 8; i++) {
+          const ang = (i / 8) * Math.PI * 2;
+          const leaf = new THREE.Mesh(leafGeo, (i % 2 === 0) ? leafMatBlight : leafMatWeed);
+          leaf.rotation.z = ang;
+          leaf.rotation.x = 0.35 * Math.sin(ang);
+          leaf.rotation.y = 0.35 * Math.cos(ang);
+          leaf.position.set(Math.cos(ang) * 0.035, Math.sin(ang) * 0.035, 0.045 + (i % 3) * 0.015);
+          pGroup.add(leaf);
+        }
+
+        // Соцветие / семенная головка сорняка
+        const weedHead = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(0.018),
+          new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.6 })
+        );
+        weedHead.position.z = 0.12;
+        pGroup.add(weedHead);
+
+      } else if (type === 'B') {
+        // ЗДОРОВАЯ КУЛЬТУРА (пышный здоровый куст томатов со спелыми плодами)
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 });
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.014, 0.14, 8), stemMat);
+        stem.rotation.x = Math.PI / 2;
+        stem.position.z = 0.07;
+        pGroup.add(stem);
+
+        const leafGeo = new THREE.PlaneGeometry(0.08, 0.034);
+        const leafMatFresh = new THREE.MeshStandardMaterial({
+          color: 0x22c55e, // яркая здоровая сочная зелень
+          side: THREE.DoubleSide,
+          roughness: 0.6
+        });
+
+        for (let i = 0; i < 10; i++) {
+          const ang = (i / 10) * Math.PI * 2;
+          const leaf = new THREE.Mesh(leafGeo, leafMatFresh);
+          leaf.rotation.z = ang;
+          leaf.rotation.x = 0.4 * Math.sin(ang);
+          leaf.rotation.y = 0.4 * Math.cos(ang);
+          leaf.position.set(Math.cos(ang) * 0.04, Math.sin(ang) * 0.04, 0.05 + (i % 3) * 0.02);
+          pGroup.add(leaf);
+        }
+
+        // 3 спелых плода томата
+        const fruitGeo = new THREE.SphereGeometry(0.015, 10, 10);
+        const fruitMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.25 });
+        [
+          { x: 0.025, y: 0.015, z: 0.07 },
+          { x: -0.020, y: 0.025, z: 0.08 },
+          { x: 0.010, y: -0.025, z: 0.06 }
+        ].forEach(fp => {
+          const fr = new THREE.Mesh(fruitGeo, fruitMat);
+          fr.position.set(fp.x, fp.y, fp.z);
+          pGroup.add(fr);
+        });
+
+      } else {
+        // УЧАСТОК U: СОМНИТЕЛЬНЫЙ ДЕФЕКТНЫЙ СПЕКТР / СУХОЙ СТЕБЕЛЬ
+        const dryMat = new THREE.MeshStandardMaterial({ color: 0x78716c, roughness: 0.95 });
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.09, 6), dryMat);
+        stem.rotation.z = 0.35;
+        stem.rotation.x = Math.PI / 2 + 0.2;
+        stem.position.set(0.01, 0, 0.04);
+        pGroup.add(stem);
+
+        const twig = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.008, 0.006), dryMat);
+        twig.position.set(-0.01, 0.01, 0.05);
+        twig.rotation.z = -0.6;
+        pGroup.add(twig);
+      }
+
+      return pGroup;
+    }
+
+    // --- ДИНАМИЧЕСКИЕ РАНДОМИЗИРОВАННЫЕ ЦЕЛИ (ДРОНЫ ИЗНАЧАЛЬНО ИХ НЕ ЗНАЮТ) ---
+    let targetsData = [];
+    let targetMeshes = [];
+
+    // --- 2D SLAM Occupancy Grid (60 x 40 клеток по 0.1 м) ---
+    const SLAM_COLS = 60;
+    const SLAM_ROWS = 40;
+    const SLAM_RES = 0.1; // 10 см на клетку (полигон 6.0 x 4.0 м)
+    // 0: Неотсканировано (туман), 1: Свободно, 2: Стена, 3: Внутри фигуры стен (сплошная преграда)
+    const slamGrid = new Uint8Array(SLAM_COLS * SLAM_ROWS);
+    let slamCoverage = 0.0;
+    let slamWallsCount = 0;
+    let totalReachableCells = 0;
+
+    // Расчет достижимых клеток поля (без внутренних объемов NFZ)
+    const isReachableGrid = new Uint8Array(SLAM_COLS * SLAM_ROWS);
+    function recomputeReachableGrid() {
+      totalReachableCells = 0;
+      isReachableGrid.fill(0);
+      for (let c = 0; c < SLAM_COLS; c++) {
+        const cx = (c + 0.5) * SLAM_RES;
+        for (let r = 0; r < SLAM_ROWS; r++) {
+          const cy = (r + 0.5) * SLAM_RES;
+          let insideNfz = false;
+          nfzZones.forEach(z => {
+            if (cx >= (z.cx - z.w/2) && cx <= (z.cx + z.w/2) &&
+                cy >= (z.cy - z.h/2) && cy <= (z.cy + z.h/2)) {
+              insideNfz = true;
+            }
+          });
+          if (!insideNfz) {
+            totalReachableCells++;
+            isReachableGrid[r * SLAM_COLS + c] = 1;
+          }
+        }
+      }
+    }
+    recomputeReachableGrid();
+
+    // --- Переключаемый режим управления: Полетник (WASD) vs Моторы (RPM Mixer) ---
+    let controlMode = 'flight_controller'; // 'flight_controller' | 'motor_mixer'
+    const motorRPM = [0, 0, 0, 0]; // M1..M4 в процентах 0..100%
+
+
+    function updateHUDDiscoveredCount(cnt) {
+      const el = document.getElementById('targetsDiscoveredValue');
+      if (el) el.textContent = `${cnt} / 10 ЦЕЛЕЙ`;
+    }
+
+    let toastTimeout = null;
+    function showDiscoveryToast(t) {
+      const el = document.getElementById('discoveryToast');
+      if (!el) return;
+      let badge = `[Класс ${t.type}]`;
+      if (t.type === 'A_NFZ') badge = `[ОЧАГ В ЗОНЕ NFZ!]`;
+      el.textContent = `📷 ОБНАРУЖЕН: ${badge} ${t.name} (X:${t.x.toFixed(2)}, Y:${t.y.toFixed(2)})`;
+      if (t.type === 'A_NFZ') {
+        el.style.borderColor = '#ef4444';
+        el.style.color = '#f87171';
+      } else if (t.type === 'B') {
+        el.style.borderColor = '#3b82f6';
+        el.style.color = '#60a5fa';
+      } else if (t.type === 'U') {
+        el.style.borderColor = '#a855f7';
+        el.style.color = '#c084fc';
+      } else {
+        el.style.borderColor = '#22c55e';
+        el.style.color = '#4ade80';
+      }
+      el.style.display = 'block';
+      el.style.opacity = '1';
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        el.style.display = 'none';
+      }, 2400);
+    }
+
+    
+    // Функция сканирования сенсором камеры и заполнения SLAM-карты
+        // Функция сканирования сенсором камеры и заполнения SLAM-карты
+    function updateSlamScan(px, py, pz) {
+      if (pz < 0.15) return;
+      // Реальная зона обзора камеры: полуразмеры проекции конуса на земле (угол FOV ~80°)
+      const hRel = Math.max(pz, 0.10);
+      const w = 0.90 * (hRel / 1.2); // Полуширина конуса по X
+      const d = 0.65 * (hRel / 1.2); // Полувысота конуса по Y
+      let newlyScanned = false;
+
+      for (let c = 0; c < SLAM_COLS; c++) {
+        const cx = (c + 0.5) * SLAM_RES;
+        if (Math.abs(cx - px) > w + 0.05) continue;
+
+        for (let r = 0; r < SLAM_ROWS; r++) {
+          const cy = (r + 0.5) * SLAM_RES;
+          if (Math.abs(cy - py) > d + 0.05) continue;
+
+          // Клетка попадает строго в видимый световой конус камеры на земле:
+          if (Math.abs(cx - px) <= w && Math.abs(cy - py) <= d) {
+            const idx = r * SLAM_COLS + c;
+
+            let isWall = false;
+            let isInside = false;
+
+            nfzZones.forEach(z => {
+              const xMin = z.cx - z.w / 2;
+              const xMax = z.cx + z.w / 2;
+              const yMin = z.cy - z.h / 2;
+              const yMax = z.cy + z.h / 2;
+
+              // Периметр — обнаруженная физическая стена / барьер
+              const onBorderX = (Math.abs(cx - xMin) <= 0.15 || Math.abs(cx - xMax) <= 0.15) && (cy >= yMin - 0.10 && cy <= yMax + 0.10);
+              const onBorderY = (Math.abs(cy - yMin) <= 0.15 || Math.abs(cy - yMax) <= 0.15) && (cx >= xMin - 0.10 && cx <= xMax + 0.10);
+
+              if (onBorderX || onBorderY) {
+                isWall = true;
+              } else if (cx > xMin && cx < xMax && cy > yMin && cy < yMax) {
+                // Если найдена фигура из стен, внутри тоже считается стеной!
+                isInside = true;
+              }
+            });
+
+            if (isWall) {
+              if (slamGrid[idx] !== 2) {
+                slamGrid[idx] = 2;
+                slamWallsCount++;
+                newlyScanned = true;
+              }
+            } else if (isInside) {
+              if (slamGrid[idx] !== 3) {
+                slamGrid[idx] = 3;
+                newlyScanned = true;
+              }
+            } else {
+              if (slamGrid[idx] === 0) {
+                slamGrid[idx] = 1; // Проверенная свободная зона
+                newlyScanned = true;
+              }
+            }
+          }
+        }
+      }
+
+      if (newlyScanned) {
+        // Честный расчет покрытия SLAM: доля реально рассеянного тумана войны на всей доступной площади
+        let fogOutsideNfz = 0;
+        for (let i = 0; i < slamGrid.length; i++) {
+          if (slamGrid[i] === 0 && isReachableGrid[i] === 1) fogOutsideNfz++;
+        }
+        slamCoverage = Math.max(0.0, ((totalReachableCells - fogOutsideNfz) / totalReachableCells) * 100.0);
+        const badge = document.getElementById('slamCoverageBadge');
+        if (badge) badge.textContent = `ПОКРЫТИЕ: ${slamCoverage.toFixed(1)}%`;
+      }
+    }
+
+    // Отрисовка 2D-карты SLAM на HTML5 Canvas (300 x 200 px)
+    const slamCanvas = document.getElementById('slamCanvas');
+    const slamCtx = slamCanvas ? slamCanvas.getContext('2d') : null;
+
+    function renderSlamMap() {
+      if (!slamCtx) return;
+      const W = slamCanvas.width;
+      const H = slamCanvas.height;
+      const scaleX = W / FIELD_WIDTH;  // 50 px/м
+      const scaleY = H / FIELD_HEIGHT; // 50 px/м
+
+      // 1. Очистка фона (туман войны)
+      slamCtx.fillStyle = '#060a14';
+      slamCtx.fillRect(0, 0, W, H);
+
+      // 2. Отрисовка клеток Occupancy Grid (проверенная зона закрашивается!)
+      const cellW = W / SLAM_COLS;
+      const cellH = H / SLAM_ROWS;
+
+      for (let c = 0; c < SLAM_COLS; c++) {
+        for (let r = 0; r < SLAM_ROWS; r++) {
+          const val = slamGrid[r * SLAM_COLS + c];
+          const px = c * cellW;
+          const py = H - (r + 1) * cellH; // Инвертируем Y для совпадения с миром
+
+          if (val === 1) {
+            // Четко закрашенная проверенная зона (насыщенный зеленый цвет)
+            slamCtx.fillStyle = '#15803d';
+            slamCtx.fillRect(px, py, cellW + 0.6, cellH + 0.6);
+          } else if (val === 2) {
+            // Обнаруженная стена (янтарно-оранжевая)
+            slamCtx.fillStyle = '#f59e0b';
+            slamCtx.fillRect(px, py, cellW + 0.6, cellH + 0.6);
+          } else if (val === 3) {
+            // Внутренность фигуры из стен (сплошная темно-красная преграда)
+            slamCtx.fillStyle = '#b91c1c';
+            slamCtx.fillRect(px, py, cellW + 0.6, cellH + 0.6);
+          } else {
+            // Неотсканированный туман: легкие координатные точки
+            if (c % 4 === 0 && r % 4 === 0) {
+              slamCtx.fillStyle = '#1e293b';
+              slamCtx.fillRect(px, py, 1.5, 1.5);
+            }
+          }
+        }
+      }
+
+      // 3. 100% честный SLAM: никаких синтетических прямоугольников поверх карты!
+      // Отображаются исключительно те пиксели стен (оранжевые), которые физически зафиксировал сенсор камеры.
+
+      // 4. Посадочные площадки Home
+      // Home-1 (0.4, 0.4)
+      slamCtx.strokeStyle = '#ea580c';
+      slamCtx.lineWidth = 2;
+      slamCtx.beginPath();
+      slamCtx.arc(0.4 * scaleX, H - 0.4 * scaleY, 7, 0, Math.PI * 2);
+      slamCtx.stroke();
+      slamCtx.fillStyle = '#ea580c';
+      slamCtx.font = 'bold 7px sans-serif';
+      slamCtx.textAlign = 'center';
+      slamCtx.fillText('H1', 0.4 * scaleX, H - 0.4 * scaleY + 2.5);
+
+      // Home-2 (0.4, 1.2)
+      slamCtx.strokeStyle = '#22c55e';
+      slamCtx.lineWidth = 2;
+      slamCtx.beginPath();
+      slamCtx.arc(0.4 * scaleX, H - 1.2 * scaleY, 7, 0, Math.PI * 2);
+      slamCtx.stroke();
+      slamCtx.fillStyle = '#22c55e';
+      slamCtx.fillText('H2', 0.4 * scaleX, H - 1.2 * scaleY + 2.5);
+
+      // 5. Маршрут Исполнителя на миникарте (появляется ТОЛЬКО после завершения разведки!)
+      if (chainStage >= 2 && typeof drone2State !== 'undefined' && drone2State && drone2State.waypoints && drone2State.waypoints.length > 1) {
+        slamCtx.strokeStyle = '#38bdf8';
+        slamCtx.lineWidth = 2;
+        slamCtx.setLineDash([4, 3]);
+        slamCtx.beginPath();
+        drone2State.waypoints.forEach((wp, idx) => {
+          const wx = wp.x * scaleX;
+          const wy = H - wp.y * scaleY;
+          if (idx === 0) slamCtx.moveTo(wx, wy);
+          else slamCtx.lineTo(wx, wy);
+        });
+        slamCtx.stroke();
+        slamCtx.setLineDash([]);
+
+        // Путевые точки маршрута исполнителя
+        drone2State.waypoints.forEach((wp, idx) => {
+          if (idx > 0 && idx < drone2State.waypoints.length - 1) {
+            const wx = wp.x * scaleX;
+            const wy = H - wp.y * scaleY;
+            slamCtx.fillStyle = '#38bdf8';
+            slamCtx.beginPath();
+            slamCtx.arc(wx, wy, 2.5, 0, Math.PI * 2);
+            slamCtx.fill();
+          }
+        });
+      }
+
+      // 6. Обнаруженные цели
+      targetsData.forEach(t => {
+        if (t.discovered) {
+          const tx = t.x * scaleX;
+          const ty = H - t.y * scaleY;
+          let col = '#22c55e';
+          if (t.type === 'B') col = '#3b82f6';
+          if (t.type === 'U') col = '#a855f7';
+          if (t.type === 'A_NFZ') col = '#ef4444';
+
+          slamCtx.fillStyle = col;
+          slamCtx.beginPath();
+          slamCtx.arc(tx, ty, 4.5, 0, Math.PI * 2);
+          slamCtx.fill();
+
+          slamCtx.strokeStyle = '#ffffff';
+          slamCtx.lineWidth = 1;
+          slamCtx.beginPath();
+          slamCtx.arc(tx, ty, 4.5, 0, Math.PI * 2);
+          slamCtx.stroke();
+
+          slamCtx.fillStyle = '#ffffff';
+          slamCtx.font = 'bold 7px sans-serif';
+          slamCtx.fillText(t.type === 'A_NFZ' ? 'X' : t.type, tx, ty + 2.5);
+        }
+      });
+
+      // 7. Позиции дронов на 2D-карте
+      [drone2State, drone1State].forEach(dr => {
+        const dx = dr.x * scaleX;
+        const dy = H - dr.y * scaleY;
+        const isRecon = (dr.role === 'recon');
+        const color = isRecon ? '#ea580c' : '#22c55e';
+
+        slamCtx.fillStyle = color;
+        slamCtx.beginPath();
+        slamCtx.arc(dx, dy, 5, 0, Math.PI * 2);
+        slamCtx.fill();
+
+        slamCtx.strokeStyle = '#ffffff';
+        slamCtx.lineWidth = 1.5;
+        slamCtx.beginPath();
+        slamCtx.moveTo(dx, dy);
+        slamCtx.lineTo(dx + Math.cos(dr.yaw) * 10, dy - Math.sin(dr.yaw) * 10);
+        slamCtx.stroke();
+      });
+
+      // 8. Подпись статуса маршрута в шапке карты
+      slamCtx.fillStyle = '#38bdf8';
+      slamCtx.font = 'bold 8px monospace';
+      slamCtx.textAlign = 'left';
+      const validCnt = (drone1State.memory || []).filter(t => t.type === 'A' && !t.insideNFZ).length;
+      slamCtx.fillText(`МАРШРУТ ИСПОЛНИТЕЛЯ (LIVE): ${validCnt} ЦЕЛЕЙ`, 8, 12);
+    }
+
+    // --- РАНДОМИЗАЦИЯ ПОЛОЖЕНИЯ ПРЕПЯТСТВИЙ NFZ НА ПОЛИГОНЕ ---
+    function randomizeNfzPositions() {
+      const z1 = nfzZones[0];
+      const z2 = nfzZones[1];
+
+      let valid = false;
+      let attempts = 0;
+      while (!valid && attempts < 300) {
+        attempts++;
+        // NFZ-1 (Шкаф автоматики 1.2 x 1.0 м): лево-центральная зона
+        z1.cx = 2.30 + Math.random() * 0.40; // 2.30 .. 2.70
+        z1.cy = 1.95 + Math.random() * 0.35; // 1.95 .. 2.30
+
+        // NFZ-2 (Метеомачта 0.8 x 0.8 м): право-центральная зона
+        z2.cx = 4.20 + Math.random() * 0.40; // 4.20 .. 4.60
+        z2.cy = 1.30 + Math.random() * 0.30; // 1.30 .. 1.60
+
+        // Гарантированный зазор между физическими телами преград не менее 0.70 м:
+        const gapX = (z2.cx - z2.w / 2) - (z1.cx + z1.w / 2);
+        if (gapX >= 0.70) {
+          valid = true;
+        }
+      }
+
+      // Пересчет зон безопасности (+ BUFFER_INFLATION + DRONE_RADIUS)
+      nfzZones.forEach(z => {
+        z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
+        z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
+        z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
+        z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
+      });
+
+      // Перемещение 3D-моделей оборудования
+      if (z1.group) z1.group.position.set(z1.cx, z1.cy, 0);
+      if (z2.group) z2.group.position.set(z2.cx, z2.cy, 0);
+
+      // Перемещение 3D-призм и желтых пунктирных контуров
+      nfzZones.forEach(z => {
+        if (z.mesh) z.mesh.position.set(z.cx, z.cy, NFZ_MAX_Z / 2);
+        if (z.bLine) z.bLine.position.set(z.cx, z.cy, NFZ_MAX_Z / 2);
+      });
+
+      // Пересчет сетки достижимости для честного расчета покрытия SLAM
+      recomputeReachableGrid();
+    }
+
+    function generateRandomTargets() {
+      // 1. Рандомизируем положение препятствий (NFZ-1 и NFZ-2)
+      randomizeNfzPositions();
+
+      // 2. Удаляем старые меши и спрайты целей со сцены
+      targetMeshes.forEach(tm => {
+        scene.remove(tm.group);
+        if (tm.sprite) {
+          scene.remove(tm.sprite);
+          const sIdx = allSceneLabels.indexOf(tm.sprite);
+          if (sIdx !== -1) allSceneLabels.splice(sIdx, 1);
+        }
+      });
+      targetMeshes = [];
+      targetsData = [];
+
+      // Сброс SLAM-сетки и покрытия при генерации новой карты
+      if (typeof slamGrid !== 'undefined') {
+        slamGrid.fill(0);
+        slamCoverage = 0.0;
+        slamWallsCount = 0;
+        const covBadge = document.getElementById('slamCoverageBadge');
+        if (covBadge) covBadge.textContent = 'ПОКРЫТИЕ: 0.0%';
+      }
+
+      const z1 = nfzZones[0];
+      const z2 = nfzZones[1];
+
+      // 2 очага намеренно внутри запретных зон NFZ (по ТЗ: проверка валидатора GCS):
+      targetsData.push({
+        id: 7,
+        type: 'A_NFZ',
+        name: 'Очаг A-7 (Внутри зоны NFZ-1)',
+        x: z1.cx + (Math.random() - 0.5) * (z1.w * 0.40),
+        y: z1.cy + (Math.random() - 0.5) * (z1.h * 0.40),
+        discovered: false,
+        treated: false
+      });
+      targetsData.push({
+        id: 8,
+        type: 'A_NFZ',
+        name: 'Очаг A-8 (Внутри зоны NFZ-2)',
+        x: z2.cx + (Math.random() - 0.5) * (z2.w * 0.40),
+        y: z2.cy + (Math.random() - 0.5) * (z2.h * 0.40),
+        discovered: false,
+        treated: false
+      });
+
+      // Функция проверки, попадает ли точка в запретный барьер NFZ:
+      function isInsideAnyNfzBarrier(px, py) {
+        for (let i = 0; i < nfzZones.length; i++) {
+          const z = nfzZones[i];
+          if (px >= z.barrierMinX && px <= z.barrierMaxX &&
+              py >= z.barrierMinY && py <= z.barrierMaxY) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      // 6 очагов класса A в разрешенных агрономических зонах:
+      const zonesA = [
+        { xMin: 0.90, xMax: 1.30, yMin: 0.55, yMax: 0.90, name: 'Очаг A-1 (Юго-Запад)' },
+        { xMin: 2.10, xMax: 3.10, yMin: 0.36, yMax: 0.50, name: 'Очаг A-2 (Юг)' },
+        { xMin: 0.90, xMax: 1.30, yMin: 3.25, yMax: 3.55, name: 'Очаг A-3 (Северо-Запад)' },
+        { xMin: 2.10, xMax: 3.10, yMin: 3.25, yMax: 3.55, name: 'Очаг A-4 (Север)' },
+        { xMin: 4.10, xMax: 5.20, yMin: 3.25, yMax: 3.55, name: 'Очаг A-5 (Северо-Восток)' },
+        { xMin: 5.35, xMax: 5.55, yMin: 2.10, yMax: 2.70, name: 'Очаг A-6 (Восток)' }
+      ];
+
+      zonesA.forEach((z, idx) => {
+        let tx = 0, ty = 0, ok = false, tries = 0;
+        while (!ok && tries < 50) {
+          tries++;
+          tx = z.xMin + Math.random() * (z.xMax - z.xMin);
+          ty = z.yMin + Math.random() * (z.yMax - z.yMin);
+          if (!isInsideAnyNfzBarrier(tx, ty)) ok = true;
+        }
+        targetsData.push({
+          id: idx + 1,
+          type: 'A',
+          name: z.name,
+          x: tx,
+          y: ty,
+          discovered: false,
+          treated: false
+        });
+      });
+
+      // 1 здоровый участок B (томаты/культура):
+      targetsData.push({
+        id: 9,
+        type: 'B',
+        name: 'Участок B-9 (Здоровая культура)',
+        x: 0.70 + Math.random() * 0.30,
+        y: 1.90 + Math.random() * 0.50,
+        discovered: false,
+        treated: false
+      });
+
+      // 1 сомнительный участок U (неопределенная текстура/дефект):
+      targetsData.push({
+        id: 10,
+        type: 'U',
+        name: 'Участок U-10 (Неопределенный спектр)',
+        x: 5.30 + Math.random() * 0.25,
+        y: 0.70 + Math.random() * 0.40,
+        discovered: false,
+        treated: false
+      });
+
+      // Создание 3D-объектов на полигоне:
+      targetsData.forEach(t => {
+        const tGroup = new THREE.Group();
+        tGroup.position.set(t.x, t.y, 0.012);
+
+        // Земляной кругляш под растением
+        const soilBed = new THREE.Mesh(
+          new THREE.CircleGeometry(0.28, 24),
+          new THREE.MeshStandardMaterial({ color: 0x1e150f, roughness: 0.95 })
+        );
+        tGroup.add(soilBed);
+
+        // 1. Рабочая область цели по ТЗ: R = 0.25 м
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0x64748b,
+          transparent: true,
+          opacity: 0.25,
+          side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.23, 0.25, 32), ringMat);
+        ring.position.z = 0.002;
+        tGroup.add(ring);
+
+        // 2. Условный радиус воздействия / пятно форсунки по ТЗ: r = 0.04 м
+        const dotMat = new THREE.MeshBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.45 });
+        const dot = new THREE.Mesh(new THREE.CircleGeometry(0.04, 16), dotMat);
+        dot.position.z = 0.003;
+        tGroup.add(dot);
+
+        // 3. Реалистичная 3D-модель растения по классу (сорняк A, культура B, сухой стебель U)
+        const plant = buildPlantModel(t.type);
+        tGroup.add(plant);
+
+        scene.add(tGroup);
+
+        // 4. Компактный микро-пин над растением (высота всего 0.16м, не загораживает обзор):
+        let pinText = `A-${t.id}`;
+        let pinColor = '#f97316';
+        let pinIcon = '🎯';
+
+        if (t.type === 'A_NFZ') {
+          pinText = `NFZ-${t.id}`;
+          pinColor = '#ef4444';
+          pinIcon = '🚫';
+        } else if (t.type === 'B') {
+          pinText = 'Культура B';
+          pinColor = '#3b82f6';
+          pinIcon = '🌿';
+        } else if (t.type === 'U') {
+          pinText = 'Объект U';
+          pinColor = '#a855f7';
+          pinIcon = '❓';
+        }
+
+        const sprite = createMicroPin(pinText, pinColor, pinIcon);
+        sprite.position.set(t.x, t.y, 0.16);
+        sprite.material.opacity = 0.35; // До разведки приглушен
+        scene.add(sprite);
+
+        targetMeshes.push({
+          data: t,
+          group: tGroup,
+          ringMesh: ring,
+          dotMesh: dot,
+          plantMesh: plant,
+          sprite: sprite
+        });
+      });
+
+      if (typeof drone1State !== 'undefined') drone1State.memory = [];
+      updateHUDDiscoveredCount(0);
+
+      // Автоматическое обновление галсов под новую карту
+      if (typeof generateBoustrophedonReconPath === 'function') {
+        plannedReconWaypoints = generateBoustrophedonReconPath();
+        if (typeof drone1State !== 'undefined') {
+          drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
+          if (typeof activeDroneId !== 'undefined' && activeDroneId === 1 && typeof routeVisible !== 'undefined' && routeVisible && typeof updateRouteLine === 'function') updateRouteLine(drone1State.waypoints);
+        }
+      }
+    }
+
+    // --- МОДЕЛИРОВАНИЕ ДВУХ БПЛА ---
+    function buildQuadcopter(role) {
+      const droneRig = new THREE.Group();
+      const droneBody = new THREE.Group();
+      droneRig.add(droneBody);
+
+      const isRecon = (role === 'recon');
+
+      // МАСШТАБ: БПЛА-2 (Поливщик/Исполнитель) ЗНАЧИТЕЛЬНО БОЛЬШЕ разведчика (в 2.2 раза!)
+      const armSpan = isRecon ? 0.11 : 0.24; // Размах 22 см vs 55 см!
+      const frameColor = isRecon ? 0xf8fafc : 0x0f172a;
+      const accentColor = isRecon ? 0xea580c : 0x16a34a;
+      const propFrontColor = isRecon ? 0xea580c : 0x22c55e;
+      const propRearColor = isRecon ? 0x38bdf8 : 0x15803d;
+
+      const carbonMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.35, metalness: 0.7 });
+      const accentMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.3, metalness: 0.8 });
+      const motorMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.2, metalness: 0.95 });
+
+      if (isRecon) {
+        // --- БПЛА-1: КОМПАКТНЫЙ ЛЕГКИЙ РАЗВЕДЧИК ---
+        const bottomPlate = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.005), carbonMat);
+        droneBody.add(bottomPlate);
+
+        const topPlate = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.005), carbonMat);
+        topPlate.position.set(0, 0, 0.02);
+        droneBody.add(topPlate);
+
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.025), accentMat);
+        canopy.position.set(0, 0, 0.032);
+        droneBody.add(canopy);
+
+        const gpsPost = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.03, 8), carbonMat);
+        gpsPost.rotation.x = Math.PI / 2;
+        gpsPost.position.set(-0.035, 0, 0.045);
+        droneBody.add(gpsPost);
+
+        const gpsPuck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.005, 16), carbonMat);
+        gpsPuck.rotation.x = Math.PI / 2;
+        gpsPuck.position.set(-0.035, 0, 0.06);
+        droneBody.add(gpsPuck);
+      } else {
+        // --- БПЛА-2: МОЩНЫЙ ТЯЖЕЛЫЙ АГРОНОМИЧЕСКИЙ ОПРЫСКИВАТЕЛЬ (БОЛЬШОЙ КОРПУС) ---
+        const heavyBottom = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.012), carbonMat);
+        droneBody.add(heavyBottom);
+
+        const heavyTop = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.010), carbonMat);
+        heavyTop.position.set(0, 0, 0.04);
+        droneBody.add(heavyTop);
+
+        const industrialCockpit = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.045), accentMat);
+        industrialCockpit.position.set(0, 0, 0.065);
+        droneBody.add(industrialCockpit);
+
+        // Мощная двухмачтовая антенна RTK GNSS
+        [-0.07, 0.07].forEach(ax => {
+          const mPost = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.06, 8), carbonMat);
+          mPost.rotation.x = Math.PI / 2;
+          mPost.position.set(-0.08, ax, 0.07);
+          droneBody.add(mPost);
+
+          const mPuck = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.008, 16), carbonMat);
+          mPuck.rotation.x = Math.PI / 2;
+          mPuck.position.set(-0.08, ax, 0.10);
+          droneBody.add(mPuck);
+        });
+      }
+
+      // 4 мотора и лучи (с учетом размаха для каждого дрона)
+      const motorPositions = [
+        { x:  armSpan, y:  armSpan, front: true },
+        { x:  armSpan, y: -armSpan, front: true },
+        { x: -armSpan, y:  armSpan, front: false },
+        { x: -armSpan, y: -armSpan, front: false }
+      ];
+
+      const propellers = [];
+
+      motorPositions.forEach(mp => {
+        const armLength = Math.sqrt(mp.x * mp.x + mp.y * mp.y);
+        const armThickness = isRecon ? 0.012 : 0.026;
+        const armHeight = isRecon ? 0.006 : 0.014;
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(armLength, armThickness, armHeight), carbonMat);
+        arm.position.set(mp.x / 2, mp.y / 2, isRecon ? 0.01 : 0.02);
+        arm.rotation.z = Math.atan2(mp.y, mp.x);
+        droneBody.add(arm);
+
+        const motR = isRecon ? 0.016 : 0.032;
+        const motH = isRecon ? 0.016 : 0.030;
+        const motor = new THREE.Mesh(new THREE.CylinderGeometry(motR, motR, motH, 16), motorMat);
+        motor.rotation.x = Math.PI / 2;
+        motor.position.set(mp.x, mp.y, isRecon ? 0.02 : 0.04);
+        droneBody.add(motor);
+
+        const propGroup = new THREE.Group();
+        propGroup.position.set(mp.x, mp.y, isRecon ? 0.03 : 0.055);
+
+        const bladeColor = mp.front ? propFrontColor : propRearColor;
+        const bladeMat = new THREE.MeshStandardMaterial({ color: bladeColor, roughness: 0.3 });
+
+        // У поливщика пропеллеры более чем в 2 раза длиннее (агродроны)
+        const bladeLen = isRecon ? 0.11 : 0.25;
+        const bladeW = isRecon ? 0.014 : 0.028;
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(bladeLen, bladeW, 0.003), bladeMat);
+        propGroup.add(blade);
+
+        const nut = new THREE.Mesh(new THREE.ConeGeometry(isRecon ? 0.005 : 0.010, isRecon ? 0.008 : 0.016, 12), motorMat);
+        nut.rotation.x = Math.PI / 2;
+        nut.position.z = 0.005;
+        propGroup.add(nut);
+
+        droneBody.add(propGroup);
+        propellers.push(propGroup);
+
+        if (isRecon) {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.05, 8), carbonMat);
+          leg.rotation.x = Math.PI / 2;
+          leg.position.set(mp.x, mp.y, -0.015);
+          droneBody.add(leg);
+
+          const foot = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 8), carbonMat);
+          foot.position.set(mp.x, mp.y, -0.04);
+          droneBody.add(foot);
+        }
+
+        const navLed = new THREE.Mesh(
+          new THREE.SphereGeometry(isRecon ? 0.005 : 0.009, 8, 8),
+          new THREE.MeshBasicMaterial({ color: mp.front ? 0x22c55e : 0xef4444 })
+        );
+        navLed.position.set(mp.x, mp.y, 0.01);
+        droneBody.add(navLed);
+      });
+
+      // Для поливщика: широкие трубчатые лыжи (шасси агродрона)
+      if (!isRecon) {
+        [-0.14, 0.14].forEach(ly => {
+          // Вертикальные стойки лыж
+          [-0.10, 0.10].forEach(lx => {
+            const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.09, 8), carbonMat);
+            strut.rotation.x = Math.PI / 2;
+            strut.position.set(lx, ly, -0.035);
+            droneBody.add(strut);
+          });
+          // Горизонтальная лыжа
+          const skid = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.36, 10), carbonMat);
+          skid.rotation.y = Math.PI / 2;
+          skid.position.set(0, ly, -0.08);
+          droneBody.add(skid);
+        });
+      }
+
+      let payloadSpot = null;
+      let cameraFrustum = null;
+      let payloadLamp = null;
+      let frustumPyrGeo = null;
+      let frustumLineGeo = null;
+      let frustumFootprintGeo = null;
+
+      if (isRecon) {
+        const camBox = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.024), carbonMat);
+        camBox.position.set(0.025, 0, -0.015);
+        droneBody.add(camBox);
+
+        const lens = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.010, 0.010, 0.008, 12),
+          new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.9 })
+        );
+        lens.rotation.x = Math.PI / 2;
+        lens.position.set(0.025, 0, -0.028);
+        droneBody.add(lens);
+
+        // --- ТОЧНЫЙ КОНУС КАМЕРЫ (АПЕКС У ОБЪЕКТИВА, ШИРОКАЯ БАЗА НА ЗЕМЛЕ) ---
+        const frustumGroup = new THREE.Group();
+        const pyrPositions = new Float32Array(18 * 3);
+        const pyrGeo = new THREE.BufferGeometry();
+        pyrGeo.setAttribute('position', new THREE.BufferAttribute(pyrPositions, 3));
+
+        const pyrMat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0.12, // Прозрачный чистый световой объем
+          depthWrite: false,
+          depthTest: true,
+          side: THREE.DoubleSide
+        });
+        const pyrMesh = new THREE.Mesh(pyrGeo, pyrMat);
+        pyrMesh.frustumCulled = false;
+        frustumGroup.add(pyrMesh);
+
+        const linePositions = new Float32Array(16 * 3);
+        const lineGeo = new THREE.BufferGeometry();
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+        const lineMesh = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false
+        }));
+        lineMesh.frustumCulled = false;
+        frustumGroup.add(lineMesh);
+
+        const footPositions = new Float32Array(5 * 3);
+        const footGeo = new THREE.BufferGeometry();
+        footGeo.setAttribute('position', new THREE.BufferAttribute(footPositions, 3));
+        const footLine = new THREE.Line(footGeo, new THREE.LineBasicMaterial({
+          color: 0x38bdf8,
+          linewidth: 2,
+          depthWrite: false
+        }));
+        footLine.frustumCulled = false;
+        frustumGroup.add(footLine);
+
+        frustumPyrGeo = pyrGeo;
+        frustumLineGeo = lineGeo;
+        frustumFootprintGeo = footGeo;
+
+        frustumGroup.visible = false;
+        scene.add(frustumGroup);
+        cameraFrustum = frustumGroup;
+      } else {
+        // --- ОБОРУДОВАНИЕ БПЛА-2 (ПОЛИВЩИК): БОЛЬШОЙ РЕЗЕРВУАР БИОПРЕПАРАТА + ШТАНГИ ОПРЫСКИВАНИЯ ---
+        // 1. Огромный агрохимический бак (в 2.5 раза больше!)
+        const tankGeo = new THREE.CylinderGeometry(0.082, 0.082, 0.115, 24);
+        const tankMat = new THREE.MeshStandardMaterial({
+          color: 0x15803d, // Зеленая жидкая полезная нагрузка
+          transparent: true,
+          opacity: 0.85,
+          roughness: 0.25,
+          metalness: 0.15
+        });
+        const tankMesh = new THREE.Mesh(tankGeo, tankMat);
+        tankMesh.rotation.x = Math.PI / 2;
+        tankMesh.position.set(0, 0, 0.115);
+        droneBody.add(tankMesh);
+
+        // Горловина бака
+        const capGeo = new THREE.CylinderGeometry(0.026, 0.026, 0.020, 16);
+        const capMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
+        const capMesh = new THREE.Mesh(capGeo, capMat);
+        capMesh.rotation.x = Math.PI / 2;
+        capMesh.position.set(0, 0, 0.175);
+        droneBody.add(capMesh);
+
+        // Смотровые трубки уровня жидкости с обеих сторон
+        [-0.084, 0.084].forEach(gx => {
+          const gaugeMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.014, 0.085),
+            new THREE.MeshBasicMaterial({ color: 0x4ade80, side: THREE.DoubleSide })
+          );
+          gaugeMesh.position.set(gx, 0, 0.115);
+          gaugeMesh.rotation.y = Math.PI / 2;
+          droneBody.add(gaugeMesh);
+        });
+
+        // 2. Две широкие распылительные штанги под лучами с 4 распылителями
+        const sprayBoom = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.007, 0.007, 0.46, 12),
+          new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.85 })
+        );
+        sprayBoom.position.set(0, 0, -0.04);
+        droneBody.add(sprayBoom);
+
+        // 4 распылительные форсунки вдоль штанги
+        [-0.20, -0.07, 0.07, 0.20].forEach(nx => {
+          const nozz = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.010, 0.014, 0.022, 12),
+            new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.9 })
+          );
+          nozz.rotation.x = Math.PI / 2;
+          nozz.position.set(nx, 0, -0.052);
+          droneBody.add(nozz);
+        });
+
+        // Центральный мощный светодиод по ТЗ
+        const lamp = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.026, 0.026, 0.012, 16),
+          new THREE.MeshBasicMaterial({ color: 0x334155 })
+        );
+        lamp.rotation.x = Math.PI / 2;
+        lamp.position.set(0, 0, -0.055);
+        droneBody.add(lamp);
+        payloadLamp = lamp;
+
+        // Световой конус индикатора операции
+        payloadSpot = new THREE.SpotLight(0x22c55e, 0, 4.5, Math.PI / 7, 0.25, 1.0);
+        payloadSpot.position.set(0, 0, -0.06);
+        payloadSpot.target.position.set(0, 0, -1);
+        droneBody.add(payloadSpot);
+        droneBody.add(payloadSpot.target);
+
+        // 3. Широкая система частиц тумана опрыскивания (от 4 форсунок)
+        const mistCount = 120;
+        const mistGeo = new THREE.BufferGeometry();
+        const mistPos = new Float32Array(mistCount * 3);
+        for (let i = 0; i < mistCount * 3; i += 3) {
+          mistPos[i] = (Math.random() - 0.5) * 0.42;
+          mistPos[i + 1] = (Math.random() - 0.5) * 0.12;
+          mistPos[i + 2] = -0.06 - Math.random() * 1.25;
+        }
+        mistGeo.setAttribute('position', new THREE.BufferAttribute(mistPos, 3));
+        const mistMat = new THREE.PointsMaterial({
+          color: 0x4ade80,
+          size: 0.026,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false
+        });
+        const mistPoints = new THREE.Points(mistGeo, mistMat);
+        droneBody.add(mistPoints);
+        droneBody.userData.mistPoints = mistPoints;
+      }
+
+      // Тень под дроном (соответствует габаритам аппарата)
+      const shadowR = isRecon ? 0.08 : 0.20;
+      const shadow = new THREE.Mesh(
+        new THREE.RingGeometry(shadowR, shadowR + 0.03, 32),
+        new THREE.MeshBasicMaterial({ color: accentColor, opacity: 0.6, transparent: true })
+      );
+      shadow.position.set(0, 0, 0.005);
+      scene.add(shadow);
+
+      
+
+      return {
+        group: droneRig,
+        body: droneBody,
+        propellers: propellers,
+        payloadSpot: payloadSpot,
+        payloadLamp: payloadLamp,
+        cameraFrustum: cameraFrustum,
+        frustumPyrGeo: frustumPyrGeo,
+        frustumLineGeo: frustumLineGeo,
+        frustumFootprintGeo: frustumFootprintGeo,
+        shadow: shadow,
+        
+      };
+    }
+
+    const drone1Obj = buildQuadcopter('recon');
+    const drone2Obj = buildQuadcopter('executor');
+
+    scene.add(drone1Obj.group);
+    scene.add(drone2Obj.group);
+
+    // --- МАРШРУТ ПОЛНОГО ОБСЛЕДОВАНИЯ ПОЛИГОНА БПЛА-РАЗВЕДЧИКОМ (ГАЛСЫ БЕЗ КАСАНИЯ СТЕН) ---
+        // --- СИСТЕМА ДИНАМИЧЕСКОГО ОБХОДА ПРЕПЯТСТВИЙ (VISIBILITY GRAPH + DIJKSTRA) ---
+    function segmentIntersectsNFZ(p1, p2) {
+      for (let i = 0; i < nfzZones.length; i++) {
+        const z = nfzZones[i];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const steps = Math.max(1, Math.ceil(dist / 0.04));
+        for (let s = 1; s < steps; s++) {
+          const px = p1.x + (p2.x - p1.x) * (s / steps);
+          const py = p1.y + (p2.y - p1.y) * (s / steps);
+          if (px > z.barrierMinX && px < z.barrierMaxX && py > z.barrierMinY && py < z.barrierMaxY) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    const ASTAR_RES = 0.10;
+    const ASTAR_COLS = Math.round(FIELD_WIDTH / ASTAR_RES);
+    const ASTAR_ROWS = Math.round(FIELD_HEIGHT / ASTAR_RES);
+
+    function getShortestLegDijkstra(pStart, pEnd) {
+      if (!segmentIntersectsNFZ(pStart, pEnd)) {
+        return [pEnd];
+      }
+
+      // Безопасный буфер: BUFFER_INFLATION (0.23) + DRONE_RADIUS (0.10) + запас = 0.35 м
+      const clearance = 0.35;
+      const grid = new Uint8Array(ASTAR_COLS * ASTAR_ROWS);
+
+      nfzZones.forEach(z => {
+        const minX = z.cx - z.w / 2 - clearance;
+        const maxX = z.cx + z.w / 2 + clearance;
+        const minY = z.cy - z.h / 2 - clearance;
+        const maxY = z.cy + z.h / 2 + clearance;
+
+        const c0 = Math.max(0, Math.floor(minX / ASTAR_RES));
+        const c1 = Math.min(ASTAR_COLS - 1, Math.floor(maxX / ASTAR_RES));
+        const r0 = Math.max(0, Math.floor(minY / ASTAR_RES));
+        const r1 = Math.min(ASTAR_ROWS - 1, Math.floor(maxY / ASTAR_RES));
+
+        for (let r = r0; r <= r1; r++) {
+          for (let c = c0; c <= c1; c++) {
+            grid[r * ASTAR_COLS + c] = 1;
+          }
+        }
+      });
+
+      const startC = Math.max(0, Math.min(ASTAR_COLS - 1, Math.floor(pStart.x / ASTAR_RES)));
+      const startR = Math.max(0, Math.min(ASTAR_ROWS - 1, Math.floor(pStart.y / ASTAR_RES)));
+      const endC = Math.max(0, Math.min(ASTAR_COLS - 1, Math.floor(pEnd.x / ASTAR_RES)));
+      const endR = Math.max(0, Math.min(ASTAR_ROWS - 1, Math.floor(pEnd.y / ASTAR_RES)));
+
+      grid[startR * ASTAR_COLS + startC] = 0;
+      grid[endR * ASTAR_COLS + endC] = 0;
+
+      const dist = new Float32Array(ASTAR_COLS * ASTAR_ROWS).fill(1e9);
+      const parent = new Int32Array(ASTAR_COLS * ASTAR_ROWS).fill(-1);
+      const closed = new Uint8Array(ASTAR_COLS * ASTAR_ROWS);
+
+      const startIdx = startR * ASTAR_COLS + startC;
+      const endIdx = endR * ASTAR_COLS + endC;
+      dist[startIdx] = 0;
+
+      const heap = [{ f: Math.hypot(endC - startC, endR - startR), idx: startIdx }];
+      const DIRS = [
+        [1, 0, 1.0], [-1, 0, 1.0], [0, 1, 1.0], [0, -1, 1.0],
+        [1, 1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [-1, -1, 1.414]
+      ];
+
+      let found = false;
+      while (heap.length > 0) {
+        let best = 0;
+        for (let i = 1; i < heap.length; i++) {
+          if (heap[i].f < heap[best].f) best = i;
+        }
+        const curr = heap.splice(best, 1)[0];
+        const u = curr.idx;
+
+        if (u === endIdx) {
+          found = true;
+          break;
+        }
+        if (closed[u]) continue;
+        closed[u] = 1;
+
+        const uC = u % ASTAR_COLS;
+        const uR = Math.floor(u / ASTAR_COLS);
+        const uDist = dist[u];
+
+        for (let d = 0; d < 8; d++) {
+          const nc = uC + DIRS[d][0];
+          const nr = uR + DIRS[d][1];
+          if (nc < 0 || nc >= ASTAR_COLS || nr < 0 || nr >= ASTAR_ROWS) continue;
+          const nIdx = nr * ASTAR_COLS + nc;
+          if (closed[nIdx] || grid[nIdx] === 1) continue;
+
+          // Защита от срезания углов на диагоналях
+          if (DIRS[d][0] !== 0 && DIRS[d][1] !== 0) {
+            if (grid[uR * ASTAR_COLS + nc] === 1 || grid[nr * ASTAR_COLS + uC] === 1) continue;
+          }
+
+          const alt = uDist + DIRS[d][2];
+          if (alt < dist[nIdx]) {
+            dist[nIdx] = alt;
+            parent[nIdx] = u;
+            const h = Math.hypot(endC - nc, endR - nr);
+            heap.push({ f: alt + h, idx: nIdx });
+          }
+        }
+      }
+
+      if (!found) {
+        return [pEnd];
+      }
+
+      const rawPath = [];
+      let curr = endIdx;
+      while (curr !== -1) {
+        const c = curr % ASTAR_COLS;
+        const r = Math.floor(curr / ASTAR_COLS);
+        rawPath.push({ x: (c + 0.5) * ASTAR_RES, y: (r + 0.5) * ASTAR_RES, z: 1.2 });
+        if (curr === startIdx) break;
+        curr = parent[curr];
+      }
+      rawPath.reverse();
+      rawPath[rawPath.length - 1] = { x: pEnd.x, y: pEnd.y, z: pEnd.z || 1.2 };
+
+      // Сглаживание траектории (прямая видимость с барьерами безопасности):
+      const smoothed = [];
+      let checkPt = pStart;
+      let idx = 0;
+      while (idx < rawPath.length) {
+        let furthest = idx;
+        for (let j = rawPath.length - 1; j > idx; j--) {
+          if (!segmentIntersectsNFZ(checkPt, rawPath[j])) {
+            furthest = j;
+            break;
+          }
+        }
+        smoothed.push(rawPath[furthest]);
+        checkPt = rawPath[furthest];
+        idx = furthest + 1;
+      }
+      return smoothed;
+    }
+
+    // --- ГЕНЕРАТОР ПАРАЛЛЕЛЬНЫХ ГАЛСОВ РАЗВЕДЧИКА С ОНЛАЙН-ОБХОДОМ НЕИЗВЕСТНЫХ ПРЕПЯТСТВИЙ ---
+    // Дрон изначально летит по чистым параллельным прямым (Lawnmower Swaths) без знания о препятствиях,
+    // а при физическом обнаружении стены на траектории — динамически обходит её по контуру!
+    function generateBoustrophedonReconPath() {
+      // Чистые параллельные галсы (полное неведение БПЛА о расположении NFZ):
+      const blindSwaths = [
+        { x: 0.40, y: 0.40, z: 1.2 }, // Взлет с Home-1
+        // Галс 1 (Южная полоса, движение на Восток):
+        { x: 0.60, y: 0.45, z: 1.2 },
+        { x: 5.48, y: 0.45, z: 1.2 },
+        // Разворот на полосу 2:
+        { x: 5.48, y: 1.25, z: 1.2 },
+        // Галс 2 (движение на Запад):
+        { x: 0.60, y: 1.25, z: 1.2 },
+        // Разворот на полосу 3:
+        { x: 0.60, y: 2.05, z: 1.2 },
+        // Галс 3 (движение на Восток):
+        { x: 5.48, y: 2.05, z: 1.2 },
+        // Разворот на полосу 4:
+        { x: 5.48, y: 2.85, z: 1.2 },
+        // Галс 4 (движение на Запад):
+        { x: 0.60, y: 2.85, z: 1.2 },
+        // Разворот на полосу 5:
+        { x: 0.60, y: 3.55, z: 1.2 },
+        // Галс 5 (Северная полоса, движение на Восток):
+        { x: 5.48, y: 3.55, z: 1.2 },
+        // Возврат на базу:
+        { x: 0.40, y: 3.55, z: 1.2 },
+        { x: 0.40, y: 0.40, z: 1.2 },
+        { x: 0.40, y: 0.40, z: 0.08 }
+      ];
+
+      // Реактивная трансляция: если прямая между параллельными галсами упирается в стену,
+      // вставляются точки обхода препятствия по безопасному внешнему контуру:
+      const fullPath = [blindSwaths[0]];
+      for (let i = 0; i < blindSwaths.length - 1; i++) {
+        const pStart = fullPath[fullPath.length - 1];
+        const pEnd = blindSwaths[i + 1];
+        const leg = getShortestLegDijkstra(pStart, pEnd);
+        for (const pt of leg) {
+          fullPath.push(pt);
+        }
+      }
+      return fullPath;
+    }
+    let plannedReconWaypoints = generateBoustrophedonReconPath();
+
+    let routeLine = null;
+    let routeNodes = [];
+    let routeVisible = true;
+
+    function updateRouteLine(waypoints) {
+      if (routeLine) scene.remove(routeLine);
+      routeNodes.forEach(n => scene.remove(n));
+      routeNodes = [];
+
+      if (!waypoints || waypoints.length === 0) return;
+
+      const routePoints = [];
+      waypoints.forEach(wp => {
+        routePoints.push(new THREE.Vector3(wp.x, wp.y, wp.z));
+      });
+
+      const routeGeo = new THREE.BufferGeometry().setFromPoints(routePoints);
+      const routeMat = new THREE.LineBasicMaterial({
+        color: 0x22c55e,
+        linewidth: 3,
+        transparent: true,
+        opacity: 0.85
+      });
+      routeLine = new THREE.Line(routeGeo, routeMat);
+      routeLine.visible = routeVisible;
+      scene.add(routeLine);
+
+      const routeNodeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+      waypoints.forEach((wp, idx) => {
+        if (idx > 0 && idx < waypoints.length - 1) {
+          const nodeMesh = new THREE.Mesh(new THREE.SphereGeometry(0.025, 12, 12), routeNodeMat);
+          nodeMesh.position.set(wp.x, wp.y, wp.z);
+          scene.add(nodeMesh);
+          routeNodes.push(nodeMesh);
+        }
+      });
+    }
+
+    // --- АВТОМАТИЧЕСКИЙ ПЛАНИРОВЩИК МАРШРУТА ИСПОЛНИТЕЛЯ НА БАЗЕ КАРТЫ РАЗВЕДКИ (GCS) ---
+        function planExecutorMissionFromMemory() {
+      const memory = (drone1State.memory && drone1State.memory.length > 0) ? drone1State.memory : [];
+      const acceptedTargets = [];
+
+      memory.forEach(t => {
+        let insideNFZ = false;
+        nfzZones.forEach(z => {
+          if (t.x >= z.barrierMinX && t.x <= z.barrierMaxX &&
+              t.y >= z.barrierMinY && t.y <= z.barrierMaxY) {
+            insideNFZ = true;
+          }
+        });
+
+        // Строгая валидация GCS:
+        // 1. Отбраковка целей внутри запретных зон NFZ
+        // 2. Отбраковка сорняков (B)
+        // 3. Отбраковка неопознанных (U)
+        // 4. Допуск только подтвержденных очагов Класса A
+        if (t.type === 'A' && !insideNFZ && !t.nfz) {
+          acceptedTargets.push(t);
+        }
+      });
+
+      if (acceptedTargets.length === 0) {
+        drone2State.waypoints = [{ x: 0.40, y: 1.20, z: 1.2 }];
+        updateRouteLine(drone2State.waypoints);
+        return 0;
+      }
+
+      // Построение кратчайшего безопасного перехода с использованием глобального алгоритма Дейкстры:
+      function getShortestLeg(pStart, pEnd) {
+        return getShortestLegDijkstra(pStart, pEnd);
+      }
+
+      // Оптимизация последовательности целей (Nearest-Neighbor TSP):
+      const waypoints = [
+        { x: 0.40, y: 1.20, z: 1.2 } // Взлет с площадки Home-2
+      ];
+
+      let currentPos = { x: 0.40, y: 1.20 };
+      const unvisited = [...acceptedTargets];
+
+      while (unvisited.length > 0) {
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < unvisited.length; i++) {
+          const t = unvisited[i];
+          const d = Math.hypot(currentPos.x - t.x, currentPos.y - t.y);
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = i;
+          }
+        }
+        const target = unvisited.splice(bestIdx, 1)[0];
+        const targetWp = { x: target.x, y: target.y, z: 1.2, action: true, targetId: target.id };
+        const leg = getShortestLeg(currentPos, targetWp);
+        leg.forEach(pt => waypoints.push(pt));
+        currentPos = { x: target.x, y: target.y };
+      }
+
+      // Кратчайший безопасный возврат на площадку Home-2:
+      const homeWp = { x: 0.40, y: 1.20, z: 1.2 };
+      const returnLeg = getShortestLeg(currentPos, homeWp);
+      returnLeg.forEach(pt => waypoints.push(pt));
+      waypoints.push({ x: 0.40, y: 1.20, z: 0.08 }); // Точная посадка на Home-2
+
+      drone2State.waypoints = waypoints;
+      updateRouteLine(waypoints);
+
+      return acceptedTargets.length;
+    }
+
+    const drone1State = {
+      role: 'recon',
+      x: 0.4, y: 0.4, z: 0.08,
+      vx: 0, vy: 0, vz: 0,
+      yaw: 0, pitch: 0, roll: 0,
+      targetZ: 0.08,
+      fsm: 'READY (HOME-1)',
+      autoPilot: false,
+      waypoints: plannedReconWaypoints,
+      autoIdx: 0,
+      waypointStuckTimer: 0,
+      memory: []
+    };
+
+    const drone2State = {
+      role: 'executor',
+      x: 0.4, y: 1.2, z: 0.08,
+      vx: 0, vy: 0, vz: 0,
+      yaw: 0, pitch: 0, roll: 0,
+      targetZ: 0.08,
+      fsm: 'READY (HOME-2)',
+      autoPilot: false,
+      payloadActive: false,
+      payloadTimeLeft: 0,
+      actionDone: false,
+      stabilizeTimer: 0,
+      waypoints: [],
+      autoIdx: 0,
+      waypointStuckTimer: 0
+    };
+
+    // Первичная рандомизация карты целей и генерация маршрута
+    generateRandomTargets();
+    planExecutorMissionFromMemory();
+
+    let activeDrone = drone1State;
+    let activeDroneObj = drone1Obj;
+
+    const MAX_TRAIL_POINTS = 300;
+    const trailPositions = new Float32Array(MAX_TRAIL_POINTS * 3);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+    const trailMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.7 });
+    const trailLine = new THREE.Line(trailGeo, trailMat);
+    scene.add(trailLine);
+    let trailCount = 0;
+
+    function addTrailPoint(x, y, z) {
+      if (trailCount < MAX_TRAIL_POINTS) {
+        trailPositions[trailCount * 3] = x;
+        trailPositions[trailCount * 3 + 1] = y;
+        trailPositions[trailCount * 3 + 2] = z;
+        trailCount++;
+        trailGeo.setDrawRange(0, trailCount);
+      } else {
+        for (let i = 0; i < (MAX_TRAIL_POINTS - 1) * 3; i++) {
+          trailPositions[i] = trailPositions[i + 3];
+        }
+        trailPositions[(MAX_TRAIL_POINTS - 1) * 3] = x;
+        trailPositions[(MAX_TRAIL_POINTS - 1) * 3 + 1] = y;
+        trailPositions[(MAX_TRAIL_POINTS - 1) * 3 + 2] = z;
+      }
+      trailGeo.attributes.position.needsUpdate = true;
+    }
+
+    const speedButtons = [
+      { id: 'spd1', mult: 1.0 },
+      { id: 'spd2', mult: 2.0 },
+      { id: 'spd4', mult: 4.0 },
+      { id: 'spd8', mult: 8.0 }
+    ];
+
+    speedButtons.forEach(sb => {
+      document.getElementById(sb.id).onclick = () => {
+        simSpeed = sb.mult;
+        speedButtons.forEach(b => document.getElementById(b.id).classList.remove('active'));
+        document.getElementById(sb.id).classList.add('active');
+      };
+    });
+
+    const btnSelectRecon = document.getElementById('selectRecon');
+    const btnSelectExec = document.getElementById('selectExec');
+
+    function setActiveDrone(droneNum) {
+      activeDroneId = droneNum;
+      if (droneNum === 1) {
+        activeDrone = drone1State;
+        activeDroneObj = drone1Obj;
+                btnSelectRecon.className = 'btn-seg active-recon';
+        btnSelectExec.className = 'btn-seg';
+        document.getElementById('activeDroneName').textContent = 'БПЛА-1 (Разведчик)';
+        document.getElementById('activeDroneName').style.color = '#fdba74';
+      } else {
+        activeDrone = drone2State;
+        activeDroneObj = drone2Obj;
+        btnSelectRecon.className = 'btn-seg';
+        btnSelectExec.className = 'btn-seg active-exec';
+        document.getElementById('activeDroneName').textContent = 'БПЛА-2 (Исполнитель)';
+        document.getElementById('activeDroneName').style.color = '#86efac';
+      }
+    }
+
+    btnSelectRecon.onclick = () => setActiveDrone(1);
+    btnSelectExec.onclick = () => setActiveDrone(2);
+
+    let cameraMode = 'track';
+    document.getElementById('camTrack').onclick = () => setCamMode('track');
+    document.getElementById('camOrbit').onclick = () => setCamMode('orbit');
+    document.getElementById('camTop').onclick = () => setCamMode('top');
+    document.getElementById('camFpv').onclick = () => setCamMode('fpv');
+
+    function setCamMode(mode) {
+      cameraMode = mode;
+      document.querySelectorAll('.btn-cam-mini').forEach(b => b.classList.remove('active'));
+      if (mode === 'track') {
+        document.getElementById('camTrack').classList.add('active');
+        controls.enabled = true;
+      }
+      if (mode === 'orbit') {
+        document.getElementById('camOrbit').classList.add('active');
+        controls.enabled = true;
+        controls.target.set(3.0, 2.0, 0.4);
+        camera.position.set(3.0, -3.2, 3.8);
+        controls.update();
+      }
+      if (mode === 'top') {
+        document.getElementById('camTop').classList.add('active');
+        controls.enabled = false;
+      }
+      if (mode === 'fpv') {
+        document.getElementById('camFpv').classList.add('active');
+        controls.enabled = false;
+      }
+    }
+
+    camera.position.set(0.4 - 1.2, 0.4 - 1.2, 1.2);
+    controls.target.set(0.4, 0.4, 0.08);
+
+    const keys = {};
+    window.addEventListener('keydown', e => {
+      keys[e.key.toLowerCase()] = true;
+      keys[e.code] = true;
+      if (e.key.toLowerCase() === 'l' && activeDrone === drone2State) triggerPayloadLED();
+    });
+    window.addEventListener('keyup', e => {
+      keys[e.key.toLowerCase()] = false;
+      keys[e.code] = false;
+    });
+
+    const helpModal = document.getElementById('helpModal');
+    document.getElementById('btnHelp').onclick = () => {
+      helpModal.style.display = (helpModal.style.display === 'block') ? 'none' : 'block';
+    };
+    document.getElementById('helpClose').onclick = () => {
+      helpModal.style.display = 'none';
+    };
+
+        // --- Слушатели управления 4 моторами (RPM) ---
+    function updateMotorUI() {
+      for (let i = 0; i < 4; i++) {
+        const slider = document.getElementById(`m${i+1}Slider`);
+        const valSpan = document.getElementById(`m${i+1}Val`);
+        if (slider) slider.value = motorRPM[i];
+        if (valSpan) valSpan.textContent = `${motorRPM[i]}% (${(motorRPM[i] * 120).toFixed(0)})`;
+      }
+    }
+
+    for (let i = 0; i < 4; i++) {
+      const slider = document.getElementById(`m${i+1}Slider`);
+      if (slider) {
+        slider.oninput = (e) => {
+          motorRPM[i] = parseInt(e.target.value);
+          updateMotorUI();
+        };
+      }
+    }
+
+    const btnHover50 = document.getElementById('btnHover50');
+    if (btnHover50) btnHover50.onclick = () => { motorRPM.fill(50); updateMotorUI(); };
+
+    const btnThrotUp = document.getElementById('btnThrotUp');
+    if (btnThrotUp) btnThrotUp.onclick = () => {
+      for (let i = 0; i < 4; i++) motorRPM[i] = Math.min(motorRPM[i] + 5, 100);
+      updateMotorUI();
+    };
+
+    const btnThrotDn = document.getElementById('btnThrotDn');
+    if (btnThrotDn) btnThrotDn.onclick = () => {
+      for (let i = 0; i < 4; i++) motorRPM[i] = Math.max(motorRPM[i] - 5, 0);
+      updateMotorUI();
+    };
+
+    const btnStopMotors = document.getElementById('btnStopMotors');
+    if (btnStopMotors) btnStopMotors.onclick = () => { motorRPM.fill(0); updateMotorUI(); };
+
+    const btnNoseDown = document.getElementById('btnNoseDown');
+    if (btnNoseDown) btnNoseDown.onclick = () => {
+      motorRPM[0] = Math.max(motorRPM[0] - 4, 0);
+      motorRPM[1] = Math.max(motorRPM[1] - 4, 0);
+      motorRPM[2] = Math.min(motorRPM[2] + 4, 100);
+      motorRPM[3] = Math.min(motorRPM[3] + 4, 100);
+      updateMotorUI();
+    };
+
+    const btnNoseUp = document.getElementById('btnNoseUp');
+    if (btnNoseUp) btnNoseUp.onclick = () => {
+      motorRPM[0] = Math.min(motorRPM[0] + 4, 100);
+      motorRPM[1] = Math.min(motorRPM[1] + 4, 100);
+      motorRPM[2] = Math.max(motorRPM[2] - 4, 0);
+      motorRPM[3] = Math.max(motorRPM[3] - 4, 0);
+      updateMotorUI();
+    };
+
+    const btnRollL = document.getElementById('btnRollL');
+    if (btnRollL) btnRollL.onclick = () => {
+      motorRPM[0] = Math.max(motorRPM[0] - 4, 0);
+      motorRPM[3] = Math.max(motorRPM[3] - 4, 0);
+      motorRPM[1] = Math.min(motorRPM[1] + 4, 100);
+      motorRPM[2] = Math.min(motorRPM[2] + 4, 100);
+      updateMotorUI();
+    };
+
+    const btnRollR = document.getElementById('btnRollR');
+    if (btnRollR) btnRollR.onclick = () => {
+      motorRPM[0] = Math.min(motorRPM[0] + 4, 100);
+      motorRPM[3] = Math.min(motorRPM[3] + 4, 100);
+      motorRPM[1] = Math.max(motorRPM[1] - 4, 0);
+      motorRPM[2] = Math.max(motorRPM[2] - 4, 0);
+      updateMotorUI();
+    };
+
+    const btnToggleMotors = document.getElementById('btnToggleMotors');
+    const motorPanel = document.getElementById('motorPanel');
+    if (btnToggleMotors) {
+      btnToggleMotors.onclick = () => {
+        if (controlMode === 'flight_controller') {
+          controlMode = 'motor_mixer';
+          btnToggleMotors.textContent = '🎛️ Моторы (RPM): ВКЛ';
+          btnToggleMotors.className = 'btn btn-active-toggle';
+          if (motorPanel) motorPanel.style.display = 'block';
+          if (motorRPM.every(v => v === 0)) {
+            motorRPM.fill(50);
+            updateMotorUI();
+          }
+        } else {
+          controlMode = 'flight_controller';
+          btnToggleMotors.textContent = '🎛️ Моторы (RPM): ВЫКЛ';
+          btnToggleMotors.className = 'btn';
+          if (motorPanel) motorPanel.style.display = 'none';
+        }
+      };
+    }
+
+    const motorCloseBtn = document.getElementById('motorCloseBtn');
+    if (motorCloseBtn) {
+      motorCloseBtn.onclick = () => {
+        controlMode = 'flight_controller';
+        if (btnToggleMotors) {
+          btnToggleMotors.textContent = '🎛️ Моторы (RPM): ВЫКЛ';
+          btnToggleMotors.className = 'btn';
+        }
+        if (motorPanel) motorPanel.style.display = 'none';
+      };
+    }
+
+    // --- Переключение 2D SLAM-карты ---
+    const btnToggleSlam = document.getElementById('btnToggleSlam');
+    const slamMapCard = document.getElementById('slamMapCard');
+    if (btnToggleSlam && slamMapCard) {
+      btnToggleSlam.onclick = () => {
+        const isClosed = (slamMapCard.style.display === 'none' || slamMapCard.style.display === '');
+        slamMapCard.style.display = isClosed ? 'block' : 'none';
+        btnToggleSlam.classList.toggle('btn-active-toggle', isClosed);
+      };
+    }
+
+    const btnToggleRoute = document.getElementById('btnToggleRoute');
+    if (btnToggleRoute) {
+      btnToggleRoute.onclick = () => {
+      routeVisible = !routeVisible;
+      routeLine.visible = routeVisible;
+      if (routeVisible) {
+        btnToggleRoute.className = 'btn btn-active-toggle';
+        btnToggleRoute.textContent = '🗺️ Траектория обхода NFZ: ВКЛ';
+      } else {
+        btnToggleRoute.className = 'btn';
+        btnToggleRoute.textContent = '🗺️ Траектория обхода NFZ: ВЫКЛ';
+      }
+    };
+    }
+
+    document.getElementById('btnTakeoff').onclick = () => {
+      activeDrone.autoPilot = false;
+      activeDrone.targetZ = NOMINAL_ALT;
+      activeDrone.fsm = 'TAKEOFF';
+    };
+    document.getElementById('btnLand').onclick = () => {
+      activeDrone.autoPilot = false;
+      activeDrone.targetZ = 0.08;
+      activeDrone.fsm = 'LANDING';
+    };
+    document.getElementById('btnPayload').onclick = () => {
+      if (activeDrone !== drone2State) {
+        alert("Полезная светодиодная нагрузка установлена только на БПЛА-2 (Исполнитель)!");
+        return;
+      }
+      triggerPayloadLED();
+    };
+    document.getElementById('btnReset').onclick = () => {
+      chainRunning = false;
+      chainStage = 0;
+      updatePipelineStep(1);
+      const btnRun = document.getElementById('btnRunChain');
+      if (btnRun) btnRun.textContent = '⚡ Запуск цепочки ТЗ';
+      const p4Span = document.querySelector('#pipe4 span');
+      if (p4Span) p4Span.textContent = '🏁 4. Финиш';
+      showPhaseBanner("Ожидание команды оператора · Нажмите «⚡ Запуск цепочки ТЗ»");
+      drone1State.autoPilot = false;
+      drone1State.x = 0.4; drone1State.y = 0.4; drone1State.z = 0.08;
+      drone1State.vx = 0; drone1State.vy = 0; drone1State.vz = 0;
+      drone1State.yaw = 0; drone1State.targetZ = 0.08;
+      drone1State.fsm = 'READY (HOME-1)';
+      drone1State.autoIdx = 0;
+      drone1State.memory = [];
+      drone1Obj.cameraFrustum.visible = false;
+
+      drone2State.autoPilot = false;
+      drone2State.x = 0.4; drone2State.y = 1.2; drone2State.z = 0.10;
+      drone2State.vx = 0; drone2State.vy = 0; drone2State.vz = 0;
+      drone2State.yaw = 0; drone2State.targetZ = 0.08;
+      drone2State.fsm = 'READY (HOME-2)';
+      drone2State.autoIdx = 0;
+      drone2State.payloadActive = false;
+
+      generateRandomTargets();
+      plannedReconWaypoints = generateBoustrophedonReconPath();
+      drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
+      planExecutorMissionFromMemory();
+      if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
+
+      trailCount = 0;
+      trailGeo.setDrawRange(0, 0);
+      document.getElementById('phaseBanner').style.display = 'none';
+      document.getElementById('nfzBanner').style.display = 'none';
+    };
+
+    document.getElementById('btnRandomize').onclick = () => {
+      generateRandomTargets();
+      plannedReconWaypoints = generateBoustrophedonReconPath();
+      drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
+      planExecutorMissionFromMemory();
+      if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
+      showDiscoveryToast({
+        type: 'A',
+        name: 'Новые препятствия NFZ и цели сгенерированы!',
+        x: 0, y: 0
+      });
+    };
+
+    function triggerPayloadLED() {
+      if (drone2State.z >= ALT_MIN && drone2State.z <= ALT_MAX) {
+        drone2State.payloadActive = true;
+        drone2State.payloadTimeLeft = 2.0;
+        drone2Obj.payloadLamp.material.color.setHex(0x22c55e);
+        drone2Obj.payloadSpot.intensity = 3.5;
+        document.getElementById('payloadLed').classList.add('active');
+        document.getElementById('payloadText').textContent = 'АКТИВНА (2.0с)';
+      } else {
+        alert(`Ошибка включения нагрузки! Высота ${drone2State.z.toFixed(2)} м вне коридора допуска [1.0 - 1.4 м]`);
+      }
+    }
+
+// (chainRunning & chainStage hoisted to top)
+
+    document.getElementById('btnRunChain').onclick = () => {
+      // При каждом запуске полной цепочки создаем новую случайную расстановку целей!
+      generateRandomTargets();
+      plannedReconWaypoints = generateBoustrophedonReconPath();
+      drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
+      drone1State.memory = [];
+      drone1State.discoveredCount = 0;
+      updateHUDDiscoveredCount(0);
+      planExecutorMissionFromMemory();
+      if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
+
+      chainRunning = true;
+      chainStage = 1;
+      setActiveDrone(1);
+
+      drone1State.autoPilot = true;
+      drone1State.autoIdx = 0;
+      drone1State.targetZ = NOMINAL_ALT;
+      drone1State.fsm = 'RECON_SURVEY';
+      drone1Obj.cameraFrustum.visible = true;
+
+      const btnRun = document.getElementById('btnRunChain');
+      if (btnRun) btnRun.textContent = '⏳ Выполняется...';
+      showPhaseBanner("ЭТАП 1: БПЛА-Разведчик сканирует полигон галсами (цели скрыты, сканирование в реальном времени...)");
+      updatePipelineStep(1);
+    };
+
+    function updatePipelineStep(step) {
+      for (let s = 1; s <= 4; s++) {
+        const el = document.getElementById('pipe' + s);
+        if (el) {
+          if (step >= 4) {
+            // Миссия завершена: все 4 шага успешно выполнены (зеленые done), ни один шаг не активен
+            el.className = 'pipe-step done';
+          } else {
+            el.className = 'pipe-step' + ((s === step) ? ' active' : ((s < step) ? ' done' : ''));
+          }
+        }
+      }
+      const p4Span = document.querySelector('#pipe4 span');
+      if (p4Span) {
+        p4Span.textContent = (step >= 4) ? '🏁 4. Завершено' : '🏁 4. Финиш';
+      }
+    }
+
+    function showPhaseBanner(text) {
+      const sub = document.getElementById('pipelineSubtext');
+      if (sub) sub.textContent = text;
+    }
+
+    // --- ФУНКЦИЯ ПРЕДОТВРАЩЕНИЯ СТОЛКНОВЕНИЯ ДРОНОВ ДРУГ С ДРУГОМ ---
+    function enforceDroneToDroneCollision() {
+      const dx = drone1State.x - drone2State.x;
+      const dy = drone1State.y - drone2State.y;
+      const dz = drone1State.z - drone2State.z;
+      const dist3D = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      if (dist3D < DRONE_COLLISION_DIST) {
+        const overlap = DRONE_COLLISION_DIST - dist3D;
+        const nx = (dist3D > 0.001) ? dx / dist3D : 1;
+        const ny = (dist3D > 0.001) ? dy / dist3D : 0;
+        const nz = (dist3D > 0.001) ? dz / dist3D : 0;
+
+        if (drone1State.autoPilot && !drone2State.autoPilot) {
+          drone2State.x -= nx * overlap;
+          drone2State.y -= ny * overlap;
+          drone2State.z -= nz * overlap;
+          drone2State.vx = 0; drone2State.vy = 0; drone2State.vz = 0;
+        } else if (!drone1State.autoPilot && drone2State.autoPilot) {
+          drone1State.x += nx * overlap;
+          drone1State.y += ny * overlap;
+          drone1State.z += nz * overlap;
+          drone1State.vx = 0; drone1State.vy = 0; drone1State.vz = 0;
+        } else {
+          drone1State.x += nx * overlap * 0.5;
+          drone1State.y += ny * overlap * 0.5;
+          drone1State.z += nz * overlap * 0.5;
+          drone2State.x -= nx * overlap * 0.5;
+          drone2State.y -= ny * overlap * 0.5;
+          drone2State.z -= nz * overlap * 0.5;
+        }
+
+        const banner = document.getElementById('nfzBanner');
+        banner.style.display = 'flex';
+        document.getElementById('bannerText').textContent = '🚨 БАРЬЕР БЕЗОПАСНОСТИ: ОПАСНОЕ СБЛИЖЕНИЕ ДВУХ БПЛА (< 0.35 м)!';
+        return true;
+      }
+      return false;
+    }
+
+    // --- ФИЗИЧЕСКИЙ ДВИЖОК С ПРАВИЛЬНЫМИ ЛОКАЛЬНЫМИ НАКЛОНАМИ ПРИ ЛЮБОМ РЫСКАНИИ ---
+    function updateDronePhysics(st, obj, isControlled, dt) {
+      if (dt > 0.06) dt = 0.06;
+
+      let localAx = 0, localAy = 0, yawRate = 0;
+
+      // 1. Непрерывное сканирование поля сенсором камеры и закрашивание 2D SLAM-карты
+      if (st.role === 'recon' && (st.autoPilot || st.z > 0.15)) {
+        updateSlamScan(st.x, st.y, st.z);
+        if (obj.cameraFrustum) obj.cameraFrustum.visible = true;
+      } else if (st.role === 'recon' && st.z <= 0.12 && !st.autoPilot) {
+        if (obj.cameraFrustum) obj.cameraFrustum.visible = false;
+      }
+
+      // 2. Обнаружение меток камерой БПЛА-1
+      if (st.role === 'recon' && (st.autoPilot || st.z > 0.15)) {
+        targetMeshes.forEach(tm => {
+          const t = tm.data;
+          if (!t.discovered) {
+            const hRel = Math.max(st.z, 0.10);
+            const w = 0.90 * (hRel / 1.2);
+            const d = 0.65 * (hRel / 1.2);
+            const dx = Math.abs(st.x - t.x);
+            const dy = Math.abs(st.y - t.y);
+
+            // Цель гарантированно открывается в момент попадания в видимый световой конус камеры!
+            if (dx <= w + 0.12 && dy <= d + 0.12) {
+              t.discovered = true;
+              let col = 0x22c55e;
+              let title = `ОЧАГ A-${t.id} (СОРНЯК)`;
+              let sub = '⚠️ Требуется опрыскивание 2.0с (R=0.25м)';
+              let colStr = '#f97316';
+              let ico = '🎯';
+
+              if (t.type === 'B') {
+                col = 0x3b82f6;
+                title = 'УЧАСТОК B (КУЛЬТУРА)';
+                sub = '🌿 Здоровая культура · Без химии';
+                colStr = '#3b82f6';
+                ico = '🌿';
+              } else if (t.type === 'U') {
+                col = 0xa855f7;
+                title = 'УЧАСТОК U (НЕОПРЕДЕЛЕНО)';
+                sub = '❓ Сомнительный спектр · Пропуск по ТЗ';
+                colStr = '#a855f7';
+                ico = '❓';
+              } else if (t.type === 'A_NFZ') {
+                col = 0xef4444;
+                title = `ОЧАГ A-${t.id} (В ЗОНЕ NFZ)`;
+                sub = '⛔ Влёт и обработка ЗАПРЕЩЕНЫ ТЗ!';
+                colStr = '#ef4444';
+                ico = '🚫';
+              }
+
+              tm.ringMesh.material.color.setHex(col);
+              tm.ringMesh.material.opacity = 0.95;
+              tm.dotMesh.material.color.setHex(col);
+              tm.dotMesh.material.opacity = 1.0;
+
+              if (tm.sprite) {
+                tm.sprite.material.opacity = 1.0;
+                let shortLbl = `A-${t.id}`;
+                if (t.type === 'B') shortLbl = 'Культура B';
+                if (t.type === 'U') shortLbl = 'Объект U';
+                if (t.type === 'A_NFZ') shortLbl = `NFZ-${t.id}`;
+                tm.sprite.update(shortLbl, colStr, ico);
+              }
+
+              st.memory.push(t);
+              updateHUDDiscoveredCount(st.memory.length);
+              showDiscoveryToast(t);
+
+              // В реальном времени обновляем идеальный маршрут Исполнителя на основе открытых точек!
+              planExecutorMissionFromMemory();
+            }
+          }
+        });
+      }
+
+      if (isControlled && !st.autoPilot) {
+        if (controlMode === 'motor_mixer') {
+          // --- Прокачанное ручное управление: 4-моторный микшер RPM (6-DOF) ---
+          const u0 = motorRPM[0] / 100.0; // M1: Перед-Л (CCW)
+          const u1 = motorRPM[1] / 100.0; // M2: Перед-П (CW)
+          const u2 = motorRPM[2] / 100.0; // M3: Зад-П (CCW)
+          const u3 = motorRPM[3] / 100.0; // M4: Зад-Л (CW)
+
+          const mg = 9.81;
+          const hoverPerMotor = mg / 4.0;
+          const t0 = (u0 / 0.5) * (u0 / 0.5) * hoverPerMotor;
+          const t1 = (u1 / 0.5) * (u1 / 0.5) * hoverPerMotor;
+          const t2 = (u2 / 0.5) * (u2 / 0.5) * hoverPerMotor;
+          const t3 = (u3 / 0.5) * (u3 / 0.5) * hoverPerMotor;
+          const totalThrust = t0 + t1 + t2 + t3;
+
+          const pitchMoment = (t2 + t3) - (t0 + t1); // Тангаж
+          const rollMoment  = (t1 + t2) - (t0 + t3); // Крен
+          const yawMoment   = (t0 + t2) - (t1 + t3); // Рыскание
+
+          st.pitch += (pitchMoment * 0.15 - st.pitch) * 8.0 * dt;
+          st.roll  += (-rollMoment * 0.15 - st.roll)  * 8.0 * dt;
+          yawRate   = yawMoment * 2.5;
+
+          const verticalAccel = (totalThrust * Math.cos(st.pitch) * Math.cos(st.roll) - mg);
+          st.targetZ += verticalAccel * 0.35 * dt;
+          if (st.targetZ < 0.08) st.targetZ = 0.08;
+          if (st.targetZ > 2.4) st.targetZ = 2.4;
+
+          localAx = totalThrust * Math.sin(st.pitch) * 0.22;
+          localAy = -totalThrust * Math.sin(st.roll) * 0.22;
+
+          const thrustEl = document.getElementById('motorThrustVal');
+          if (thrustEl) thrustEl.textContent = `Тяга Fz: ${totalThrust.toFixed(2)} Н (G=9.81Н)`;
+          const torqueEl = document.getElementById('motorTorqueVal');
+          if (torqueEl) torqueEl.textContent = `Углы: ${(st.pitch*180/Math.PI).toFixed(1)}° / ${(st.roll*180/Math.PI).toFixed(1)}°`;
+
+          if (obj.propellers && obj.propellers.length >= 4) {
+            obj.propellers[0].rotation.z += (motorRPM[0] * 0.9) * dt;
+            obj.propellers[1].rotation.z -= (motorRPM[1] * 0.9) * dt;
+            obj.propellers[2].rotation.z += (motorRPM[2] * 0.9) * dt;
+            obj.propellers[3].rotation.z -= (motorRPM[3] * 0.9) * dt;
+          }
+        } else {
+          // Стандартный полетный контроллер (WASD)
+          if (keys['w']) localAx += 1.4;
+          if (keys['s']) localAx -= 1.4;
+          if (keys['a'] || keys['arrowleft']) yawRate += 2.0;
+          if (keys['d'] || keys['arrowright']) yawRate -= 2.0;
+          if (keys['z']) localAy += 1.4;
+          if (keys['c']) localAy -= 1.4;
+          if (keys['space'] || keys['q']) st.targetZ += 0.7 * dt;
+          if (keys['shiftleft'] || keys['shiftright'] || keys['e']) st.targetZ -= 0.7 * dt;
+        }
+      } else if (st.autoPilot) {
+        const wp = st.waypoints[st.autoIdx];
+        const isFinalLandingWp = (st.autoIdx === st.waypoints.length - 1);
+        const dx = wp.x - st.x;
+        const dy = wp.y - st.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        let acceptDist = 0.12; // Точное прохождение опорных точек без срезания углов
+        if (wp.action) acceptDist = 0.06; // Допуск по ТЗ AT11-2: delta r <= 0.06 м
+        if (isFinalLandingWp) acceptDist = 0.03; // Точный захват центра площадки
+
+        if (dist > acceptDist) {
+          // Таймер застревания увеличивается только если БПЛА действительно заблокирован препятствием или не двигается
+          const spd = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
+          if (spd < 0.04) {
+            st.waypointStuckTimer += dt;
+          } else {
+            st.waypointStuckTimer = Math.max(0, st.waypointStuckTimer - dt * 0.5);
+          }
+
+          const targetYaw = Math.atan2(dy, dx);
+          let diffYaw = targetYaw - st.yaw;
+          while (diffYaw > Math.PI) diffYaw -= 2 * Math.PI;
+          while (diffYaw < -Math.PI) diffYaw += 2 * Math.PI;
+          st.yaw += diffYaw * 4.0 * dt;
+
+          const cosH = Math.cos(st.yaw);
+          const sinH = Math.sin(st.yaw);
+          const baseSpeed = (wp.action || isFinalLandingWp) ? 0.75 : 1.1;
+          const speedFactor = dist > 0.35 ? Math.min(1.8, dist * 1.5) : baseSpeed;
+          localAx = (dx * cosH + dy * sinH) / dist * speedFactor;
+          localAy = (-dx * sinH + dy * cosH) / dist * speedFactor;
+
+          st.targetZ = wp.z;
+          st.fsm = `NAV_WP_${st.autoIdx + 1}/${st.waypoints.length}`;
+
+          // Аварийный таймаут точки только при реальном застревании в препятствии более 15 секунд
+          if (st.waypointStuckTimer > 15.0) {
+            st.autoIdx++;
+            st.waypointStuckTimer = 0;
+          }
+        } else {
+          st.waypointStuckTimer = 0;
+          if (wp.action && st.role === 'executor') {
+            // Зависание и точная стабилизация над очагом A:
+            st.vx = 0; st.vy = 0;
+            if (st.stabilizeTimer < 1.0) {
+              st.stabilizeTimer += dt;
+              st.fsm = `STABILIZE_${(1.0 - st.stabilizeTimer).toFixed(1)}s`;
+            } else if (st.payloadTimeLeft <= 0 && !st.actionDone) {
+              triggerPayloadLED();
+              st.actionDone = true;
+            } else if (st.payloadTimeLeft > 0) {
+              st.fsm = `ACTION_${st.payloadTimeLeft.toFixed(1)}s`;
+            } else {
+              st.actionDone = false;
+              st.stabilizeTimer = 0;
+              st.autoIdx++;
+            }
+          } else if (isFinalLandingWp) {
+            // Строгое вертикальное приземление точно в центр Home площадки
+            const groundZ = (st.role === 'executor') ? 0.10 : 0.08;
+            st.x += (wp.x - st.x) * 12.0 * dt;
+            st.y += (wp.y - st.y) * 12.0 * dt;
+            st.vx = 0;
+            st.vy = 0;
+            st.yaw += (0 - st.yaw) * 8.0 * dt;
+            st.targetZ = groundZ;
+
+            if (st.z <= groundZ + 0.035) {
+              st.x = wp.x;
+              st.y = wp.y;
+              st.z = 0.08;
+              st.autoPilot = false;
+              st.fsm = (st.role === 'recon') ? 'HOME-1 (LANDED)' : 'HOME-2 (LANDED)';
+
+              if (chainRunning && chainStage === 1) {
+                chainStage = 2;
+                updatePipelineStep(2);
+                obj.cameraFrustum.visible = false;
+                const acceptedCount = planExecutorMissionFromMemory();
+                showPhaseBanner(`ЭТАП 2 (GCS): Разведка завершена (${drone1State.memory.length}/10 целей). 2 цели в NFZ отклонены, 2 некорректных отклонены. Принято ${acceptedCount} очагов A. Безопасный маршрут готов!`);
+                setTimeout(() => {
+                  chainStage = 3;
+                  updatePipelineStep(3);
+                  setActiveDrone(2);
+                  drone2State.autoPilot = true;
+                  drone2State.autoIdx = 0;
+                  drone2State.targetZ = NOMINAL_ALT;
+                  drone2State.fsm = 'EXEC_MISSION';
+                  showPhaseBanner(`ЭТАП 3: БПЛА-Исполнитель автономно обходит NFZ, обрабатывает ${acceptedCount} очагов A светодиодом (2с) и возвращается на Home-2.`);
+                }, 2800 / simSpeed);
+              } else if (chainRunning && chainStage === 3) {
+                chainRunning = false;
+                chainStage = 4;
+                updatePipelineStep(4);
+                st.autoPilot = false;
+                st.fsm = 'MISSION_COMPLETE';
+                st.x = 0.40; st.y = 1.20; st.z = 0.10; st.vx = 0; st.vy = 0; st.vz = 0;
+
+                // Гарантированное отключение агрооборудования и индикаторов
+                st.payloadActive = false;
+                st.payloadTimeLeft = 0;
+                obj.payloadLamp.material.color.setHex(0x334155);
+                obj.payloadSpot.intensity = 0;
+                if (obj.body && obj.body.userData && obj.body.userData.mistPoints) {
+                  obj.body.userData.mistPoints.material.opacity = 0;
+                }
+                const ledEl = document.getElementById('payloadLed');
+                if (ledEl) ledEl.classList.remove('active');
+                const txtEl = document.getElementById('payloadText');
+                if (txtEl) txtEl.textContent = 'ВЫКЛ (МИССИЯ ВЫПОЛНЕНА)';
+
+                const btnRun = document.getElementById('btnRunChain');
+                if (btnRun) btnRun.textContent = '✅ Миссия завершена';
+
+                showPhaseBanner("✅ МИССИЯ ЗАВЕРШЕНА: Все 6 очагов A обработаны, точная посадка в центр Home-2, 0 нарушений NFZ!");
+              }
+            }
+          } else {
+            st.autoIdx++;
+          }
+        }
+      }
+
+      if (st.targetZ < 0.08) st.targetZ = 0.08;
+      if (st.targetZ > 2.2) st.targetZ = 2.2;
+
+      const errZ = st.targetZ - st.z;
+      st.vz += errZ * 3.5 * dt;
+      st.vz *= Math.pow(0.85, dt * 60);
+      st.z += st.vz * dt;
+      if (st.z < 0.08) { st.z = 0.08; st.vz = 0; }
+
+      st.yaw += yawRate * dt;
+
+      // Перевод локальных ускорений (вперед/влево) в мировые координаты с учетом текущего угла рыскания (Yaw)
+      const cosY = Math.cos(st.yaw);
+      const sinY = Math.sin(st.yaw);
+      const worldAx = localAx * cosY - localAy * sinY;
+      const worldAy = localAx * sinY + localAy * cosY;
+
+      st.vx += worldAx * dt;
+      st.vy += worldAy * dt;
+
+      const currentSpeed = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
+      if (currentSpeed > MAX_SPEED) {
+        st.vx = (st.vx / currentSpeed) * MAX_SPEED;
+        st.vy = (st.vy / currentSpeed) * MAX_SPEED;
+      }
+
+      st.vx *= Math.pow(0.86, dt * 60);
+      st.vy *= Math.pow(0.86, dt * 60);
+
+      let nextX = st.x + st.vx * dt;
+      let nextY = st.y + st.vy * dt;
+
+      // Проверка барьеров NFZ
+      let collisionDetected = false;
+      if (st.z < NFZ_MAX_Z) {
+        nfzZones.forEach(z => {
+          if (nextX > z.barrierMinX && nextX < z.barrierMaxX &&
+              nextY > z.barrierMinY && nextY < z.barrierMaxY) {
+            
+            collisionDetected = true;
+            const dLeft = Math.abs(st.x - z.barrierMinX);
+            const dRight = Math.abs(st.x - z.barrierMaxX);
+            const dBottom = Math.abs(st.y - z.barrierMinY);
+            const dTop = Math.abs(st.y - z.barrierMaxY);
+            const minSide = Math.min(dLeft, dRight, dBottom, dTop);
+
+            if (minSide === dLeft) {
+              nextX = z.barrierMinX;
+              if (st.vx > 0) st.vx = 0;
+            } else if (minSide === dRight) {
+              nextX = z.barrierMaxX;
+              if (st.vx < 0) st.vx = 0;
+            } else if (minSide === dBottom) {
+              nextY = z.barrierMinY;
+              if (st.vy > 0) st.vy = 0;
+            } else {
+              nextY = z.barrierMaxY;
+              if (st.vy < 0) st.vy = 0;
+            }
+          }
+        });
+      }
+
+      st.x = nextX;
+      st.y = nextY;
+
+      if (st.x < 0.12) { st.x = 0.12; if (st.vx < 0) st.vx = 0; }
+      if (st.x > FIELD_WIDTH - 0.12) { st.x = FIELD_WIDTH - 0.12; if (st.vx > 0) st.vx = 0; }
+      if (st.y < 0.12) { st.y = 0.12; if (st.vy < 0) st.vy = 0; }
+      if (st.y > FIELD_HEIGHT - 0.12) { st.y = FIELD_HEIGHT - 0.12; if (st.vy > 0) st.vy = 0; }
+
+      if (isControlled && !st.autoPilot) {
+        const banner = document.getElementById('nfzBanner');
+        if (collisionDetected) {
+          banner.style.display = 'flex';
+          document.getElementById('bannerText').textContent = '🚨 ЗАПРЕТНАЯ ЗОНА (NFZ): БАРЬЕР АКТИВЕН. ВЛЕТ ЗАБЛОКИРОВАН';
+          nfzMeshes.forEach(nm => {
+            nm.mesh.material.color.setHex(0xff0000);
+            nm.mesh.material.opacity = 0.65;
+          });
+        } else if (!enforceDroneToDroneCollision()) {
+          banner.style.display = 'none';
+          nfzMeshes.forEach(nm => {
+            nm.mesh.material.color.setHex(0xef4444);
+            nm.mesh.material.opacity = 0.35;
+          });
+        }
+      } else if (st.autoPilot) {
+        // При автоматическом выполнении миссии предупреждение о запретной зоне скрыто
+        const banner = document.getElementById('nfzBanner');
+        if (banner && banner.style.display !== 'none' && !enforceDroneToDroneCollision()) {
+          banner.style.display = 'none';
+        }
+      }
+
+      // --- ПРАВИЛЬНЫЙ НАКЛОН В СТОРОНУ ДВИЖЕНИЯ В ЛЮБОМ НАПРАВЛЕНИИ РЫСКАНИЯ ---
+      // localAx > 0 (полет вперед по носу): тангаж (Pitch) наклоняет нос вниз!
+      // localAy > 0 (полет влево): крен (Roll) наклоняет дрон влево!
+      const targetPitch = localAx * 0.22;
+      const targetRoll = -localAy * 0.22;
+
+      st.pitch += (targetPitch - st.pitch) * 12 * dt;
+      st.roll += (targetRoll - st.roll) * 12 * dt;
+
+      const isFlying = (st.z > 0.1);
+      const propSpeed = isFlying ? 45.0 : 6.0;
+      obj.propellers.forEach((p, i) => {
+        p.rotation.z += (i % 2 === 0 ? 1 : -1) * propSpeed * dt;
+      });
+
+      if (st.role === 'executor' && st.payloadActive) {
+        st.payloadTimeLeft -= dt;
+
+        // Анимация частиц агрораспыления тумана
+        if (obj.body.userData.mistPoints) {
+          const mp = obj.body.userData.mistPoints;
+          mp.material.opacity = 0.85;
+          const posArr = mp.geometry.attributes.position.array;
+          const mistH = Math.max(st.z, 0.1);
+          for (let i = 2; i < posArr.length; i += 3) {
+            posArr[i] -= 3.5 * dt;
+            if (posArr[i] < -mistH) {
+              posArr[i] = -0.02;
+              posArr[i - 2] = (Math.random() - 0.5) * 0.04;
+              posArr[i - 1] = (Math.random() - 0.5) * 0.04;
+            }
+          }
+          mp.geometry.attributes.position.needsUpdate = true;
+        }
+
+        if (false) {
+          obj.tagSprite.update('БПЛА-2 (ОПРЫСКИВАНИЕ)', `💧 Внесение биопрепарата (${st.payloadTimeLeft.toFixed(1)}с)`, '#22c55e', '💡');
+        }
+
+        if (st.payloadTimeLeft <= 0) {
+          st.payloadActive = false;
+          st.payloadTimeLeft = 0;
+          obj.payloadLamp.material.color.setHex(0x334155);
+          obj.payloadSpot.intensity = 0;
+
+          if (obj.body.userData.mistPoints) {
+            obj.body.userData.mistPoints.material.opacity = 0;
+          }
+          if (false) {
+            obj.tagSprite.update('БПЛА-2 (ИСПОЛНИТЕЛЬ)', '💧 Бак биопрепарата + Форсунка', '#15803d', '🛸');
+          }
+
+          // Пометить обработанный очаг в 3D:
+          const currWp = st.waypoints[st.autoIdx];
+          if (currWp && currWp.targetId) {
+            const tm = targetMeshes.find(m => m.data.id === currWp.targetId);
+            if (tm) {
+              tm.data.treated = true;
+              tm.ringMesh.material.color.setHex(0x22c55e);
+              tm.dotMesh.material.color.setHex(0x4ade80);
+              tm.dotMesh.scale.set(3.5, 3.5, 1);
+              if (tm.sprite) {
+                tm.sprite.update(`A-${currWp.targetId} ГОТОВО`, '#22c55e', '✅');
+              }
+            }
+          }
+
+          if (isControlled) {
+            document.getElementById('payloadLed').classList.remove('active');
+            document.getElementById('payloadText').textContent = 'ГОТОВ';
+          }
+        } else if (isControlled) {
+          document.getElementById('payloadText').textContent = `АКТИВНА (${st.payloadTimeLeft.toFixed(1)}с)`;
+        }
+      }
+
+      // Динамическое обновление конуса камеры БПЛА-1 (Разведчик)
+      // Апекс всегда привязан к объективу, а основание точно лежит на плоскости поля (Z = 0)
+      if (st.role === 'recon' && obj.cameraFrustum && obj.cameraFrustum.visible && obj.frustumPyrGeo) {
+        // Стабилизированная камера (Gimbal): проекция строго вертикально вниз (Nadir)
+        // Конус НЕ наклоняется и НЕ качается при маневрах и наклонах дрона!
+        const vApex = [st.x, st.y, Math.max(st.z - 0.026, 0.02)];
+        const hRel = Math.max(st.z, 0.05);
+        // Реальный размер проекции камеры (соответствует зоне отрисовки SLAM-карты):
+        const w = 0.90 * (hRel / 1.2);
+        const d = 0.65 * (hRel / 1.2);
+
+        const vFL = [st.x + w, st.y + d, 0.005];
+        const vFR = [st.x + w, st.y - d, 0.005];
+        const vRR = [st.x - w, st.y - d, 0.005];
+        const vRL = [st.x - w, st.y + d, 0.005];
+
+        const tris = [
+          vApex, vFL, vFR,
+          vApex, vFR, vRR,
+          vApex, vRR, vRL,
+          vApex, vRL, vFL,
+          vFL, vFR, vRR,
+          vFL, vRR, vRL
+        ];
+        const pArr = obj.frustumPyrGeo.attributes.position.array;
+        let pIdx = 0;
+        tris.forEach(v => {
+          pArr[pIdx++] = v[0];
+          pArr[pIdx++] = v[1];
+          pArr[pIdx++] = v[2];
+        });
+        obj.frustumPyrGeo.attributes.position.needsUpdate = true;
+        obj.frustumPyrGeo.computeVertexNormals();
+
+        const lines = [
+          vApex, vFL,  vApex, vFR,  vApex, vRR,  vApex, vRL,
+          vFL, vFR,    vFR, vRR,    vRR, vRL,    vRL, vFL
+        ];
+        const lArr = obj.frustumLineGeo.attributes.position.array;
+        let lIdx = 0;
+        lines.forEach(v => {
+          lArr[lIdx++] = v[0];
+          lArr[lIdx++] = v[1];
+          lArr[lIdx++] = v[2];
+        });
+        obj.frustumLineGeo.attributes.position.needsUpdate = true;
+
+        const fArr = obj.frustumFootprintGeo.attributes.position.array;
+        const footLoop = [vFL, vFR, vRR, vRL, vFL];
+        let fIdx = 0;
+        footLoop.forEach(v => {
+          fArr[fIdx++] = v[0];
+          fArr[fIdx++] = v[1];
+          fArr[fIdx++] = v[2];
+        });
+        obj.frustumFootprintGeo.attributes.position.needsUpdate = true;
+      }
+
+      // 1. Позиционирование и поворот по рысканию родительского узла droneRig:
+      obj.group.position.set(st.x, st.y, st.z);
+      obj.group.rotation.set(0, 0, st.yaw);
+
+      // Скрываем бирку дрона при посадке на базу (чтобы не перекрывать вывеску базы H1/H2)
+      if (false) {
+        obj.tagSprite.visible = labelsVisible && (st.z >= 0.15);
+      }
+
+      // 2. Локальный наклон корпуса внутри повернутой системы координат дрона:
+      // Тангаж (Pitch) наклоняет строго нос дрона вперед/назад вдоль текущего курса!
+      // Крен (Roll) наклоняет дрон влево/вправо относительно крыльев!
+      obj.body.rotation.set(st.roll, st.pitch, 0);
+
+      obj.shadow.position.set(st.x, st.y, 0.005);
+    }
+
+    function updateCamera() {
+      if (cameraMode === 'track') {
+        const prevTarget = controls.target.clone();
+        const newTarget = new THREE.Vector3(activeDrone.x, activeDrone.y, activeDrone.z + 0.05);
+        const delta = newTarget.clone().sub(prevTarget);
+        camera.position.add(delta);
+        controls.target.copy(newTarget);
+        controls.update();
+      } else if (cameraMode === 'top') {
+        camera.position.set(3, 2, 7.8);
+        camera.lookAt(3, 2, 0);
+      } else if (cameraMode === 'fpv') {
+        camera.position.set(activeDrone.x, activeDrone.y, activeDrone.z - 0.04);
+        camera.lookAt(activeDrone.x, activeDrone.y, 0);
+      } else {
+        controls.update();
+      }
+    }
+
+    function updateHUD() {
+      document.getElementById('coordsValue').textContent = `X:${activeDrone.x.toFixed(2)} Y:${activeDrone.y.toFixed(2)} Z:${activeDrone.z.toFixed(2)}м`;
+
+      const speed = Math.sqrt(activeDrone.vx * activeDrone.vx + activeDrone.vy * activeDrone.vy);
+      const speedEl = document.getElementById('speedValue');
+      speedEl.textContent = `${speed.toFixed(2)} м/с`;
+      if (speed > MAX_SPEED) {
+        speedEl.style.color = '#f87171';
+      } else {
+        speedEl.style.color = '#38bdf8';
+      }
+
+      const fsmEl = document.getElementById('fsmStatus');
+      if (chainStage === 4 || activeDrone.fsm === 'MISSION_COMPLETE') {
+        fsmEl.textContent = 'MISSION_COMPLETE';
+        fsmEl.className = 'badge badge-ok';
+      } else if (activeDrone.z < 0.1) {
+        fsmEl.textContent = (activeDrone.fsm && activeDrone.fsm.includes('HOME')) ? activeDrone.fsm : 'ON_GROUND';
+        fsmEl.className = 'badge badge-ok';
+      } else if (activeDrone.role === 'executor' && activeDrone.payloadActive) {
+        fsmEl.textContent = 'OPERATING (LED 2s)';
+        fsmEl.className = 'badge badge-ok';
+      } else {
+        fsmEl.textContent = activeDrone.fsm;
+        fsmEl.className = 'badge badge-ok';
+      }
+
+      const altPercent = Math.min(Math.max((activeDrone.z / 2.0) * 100, 0), 100);
+      const pointer = document.getElementById('altPointer');
+      pointer.style.left = `${altPercent}%`;
+
+      if (activeDrone.z >= ALT_MIN && activeDrone.z <= ALT_MAX) {
+        pointer.style.background = '#4ade80';
+        pointer.style.boxShadow = '0 0 6px #4ade80';
+      } else {
+        pointer.style.background = '#38bdf8';
+        pointer.style.boxShadow = '0 0 6px #38bdf8';
+      }
+    }
+
+    const clock = new THREE.Clock();
+
+    
+    // Переключение окна справки ТЗ
+    const legendCard = document.getElementById('sceneLegend');
+    const btnToggleLegend = document.getElementById('btnToggleLegend');
+    const legendCloseBtn = document.getElementById('legendCloseBtn');
+    if (btnToggleLegend && legendCard) {
+      btnToggleLegend.onclick = () => {
+        const isShown = (legendCard.style.display === 'block');
+        legendCard.style.display = isShown ? 'none' : 'block';
+        btnToggleLegend.classList.toggle('btn-active-toggle', !isShown);
+      };
+    }
+    if (legendCloseBtn && legendCard) {
+      legendCloseBtn.onclick = () => {
+        legendCard.style.display = 'none';
+        if (btnToggleLegend) btnToggleLegend.classList.remove('btn-active-toggle');
+      };
+    }
+
+    // Переключение видимости 3D микро-меток
+    const btnLabelsToggle = document.getElementById('btnToggleLabels');
+    if (btnLabelsToggle) {
+      btnLabelsToggle.onclick = () => {
+        labelsVisible = !labelsVisible;
+        allSceneLabels.forEach(s => s.visible = labelsVisible);
+        btnLabelsToggle.classList.toggle('btn-active-toggle', labelsVisible);
+      };
+    }
+
+
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const rawDt = clock.getDelta();
+      const totalSimDt = Math.min(rawDt, 0.05) * simSpeed;
+      const subSteps = Math.max(Math.ceil(simSpeed), 1);
+      const subDt = totalSimDt / subSteps;
+
+      for (let s = 0; s < subSteps; s++) {
+        updateDronePhysics(drone1State, drone1Obj, (activeDrone === drone1State), subDt);
+        updateDronePhysics(drone2State, drone2Obj, (activeDrone === drone2State), subDt);
+        enforceDroneToDroneCollision();
+      }
+
+      if (activeDrone.z > 0.15) {
+        addTrailPoint(activeDrone.x, activeDrone.y, activeDrone.z);
+      }
+
+      updateCamera();
+      updateHUD();
+      if (typeof renderSlamMap === 'function') {
+        renderSlamMap();
+      }
+      renderer.render(scene, camera);
+    }
+
+    
+
+
+    // Кнопка приближения к целевому очагу
+    const btnCamClose = document.getElementById('camCloseTarget');
+    if (btnCamClose) {
+      btnCamClose.onclick = () => {
+        setCamMode('orbit');
+        document.querySelectorAll('.btn-cam-mini').forEach(b => b.classList.remove('active'));
+        btnCamClose.classList.add('active');
+        const targetA = targetMeshes.find(m => m.data.type === 'A') || targetMeshes[0];
+        if (targetA) {
+          controls.target.set(targetA.data.x, targetA.data.y, 0.15);
+          camera.position.set(targetA.data.x + 0.6, targetA.data.y - 0.7, 0.65);
+          controls.update();
+        }
+      };
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>

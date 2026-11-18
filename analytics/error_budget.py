@@ -26,6 +26,11 @@ class ErrorBudgetCalculator:
         R_drone: float = 0.10,      # Горизонтальный радиус БПЛА, м
         d_margin: float = 0.05      # Дополнительный запас, м
     ):
+        values = (e_target, e_exec, e_align, r_impact, R_drone, d_margin)
+        if any(value < 0 for value in values):
+            raise ValueError("Ошибки, радиусы и запасы не могут быть отрицательными")
+        if R_target <= 0:
+            raise ValueError("Радиус рабочей области должен быть положительным")
         self.e_target = e_target
         self.e_exec = e_exec
         self.e_align = e_align

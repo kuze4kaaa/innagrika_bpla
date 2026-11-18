@@ -24,6 +24,12 @@ class AgrotechEconomics:
         local_cost_per_ha: float = 2200.0,
         prep_cost_fixed: float = 15000.0
     ):
+        if total_area_ha <= 0:
+            raise ValueError("Площадь должна быть положительной")
+        if blanket_cost_per_ha <= 0:
+            raise ValueError("Стоимость сплошной операции должна быть положительной")
+        if recon_cost_per_ha < 0 or local_cost_per_ha <= 0 or prep_cost_fixed < 0:
+            raise ValueError("Стоимости не могут быть отрицательными")
         self.S_total = total_area_ha
         self.C_blanket = blanket_cost_per_ha
         self.C_recon = recon_cost_per_ha

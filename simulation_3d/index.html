@@ -1064,28 +1064,28 @@
         <span class="legend-icon-badge" style="background: rgba(234, 88, 12, 0.3); color: #fb923c;">🎯</span>
         <div class="legend-row-text">
           <b>Очаг A (6 шт)</b><br>
-          <span>Сорняк / болезнь. Требуется световая обработка 2.0с (R=0.25м).</span>
+          <span>Учебная текстура класса A. Назначена световая операция 2,0 с (R=0,25 м).</span>
         </div>
       </div>
       <div class="legend-row">
         <span class="legend-icon-badge" style="background: rgba(239, 68, 68, 0.3); color: #f87171;">🚫</span>
         <div class="legend-row-text">
           <b>Очаг A в NFZ (2 шт)</b><br>
-          <span>Сорняк в опасной зоне. По ТЗ полёт и обработка строго ЗАПРЕЩЕНЫ.</span>
+          <span>Класс A в запретной зоне. Полёт и операция строго запрещены.</span>
         </div>
       </div>
       <div class="legend-row">
         <span class="legend-icon-badge" style="background: rgba(59, 130, 246, 0.3); color: #60a5fa;">🌿</span>
         <div class="legend-row-text">
           <b>Участок B (1 шт)</b><br>
-          <span>Здоровая культура (томаты). Только наблюдение, без химии.</span>
+          <span>Учебная текстура класса B. Только наблюдение, операция не назначена.</span>
         </div>
       </div>
       <div class="legend-row">
         <span class="legend-icon-badge" style="background: rgba(168, 85, 247, 0.3); color: #c084fc;">❓</span>
         <div class="legend-row-text">
           <b>Участок U (1 шт)</b><br>
-          <span>Неопределенный спектр. Пропуск для исключения брака.</span>
+          <span>Неопределённая учебная текстура. Цель пропускается.</span>
         </div>
       </div>
       <div class="legend-row">
@@ -1099,7 +1099,7 @@
         <span class="legend-icon-badge" style="background: rgba(34, 197, 94, 0.3); color: #4ade80;">💡</span>
         <div class="legend-row-text">
           <b>Агрооперация (LED 2с)</b><br>
-          <span>Включение светодиода на 2.0с на высоте 1.0–1.4 м.</span>
+          <span>Включение светодиода на 2,0 с только при подтверждённом допуске.</span>
         </div>
       </div>
     </div>
@@ -1133,7 +1133,7 @@
     <div class="slam-header">
       <div class="slam-title">
         <span class="slam-pulse"></span>
-        <span>2D КАРТА ОБСЛЕДОВАНИЯ (SLAM)</span>
+        <span>2D КАРТА НАБЛЮДЕНИЙ</span>
       </div>
       <span class="slam-badge" id="slamCoverageBadge">ПОКРЫТИЕ: 0.0%</span>
     </div>
@@ -1195,7 +1195,7 @@
     <button class="btn btn-primary" id="btnTakeoff">🚀 Взлет (1.2м)</button>
     <button class="btn" id="btnLand">🛬 Посадка</button>
     <button class="btn btn-success" id="btnPayload">💡 Тест LED (2с)</button>
-    <button class="btn" id="btnToggleSlam">🗺️ SLAM</button>
+    <button class="btn" id="btnToggleSlam">🗺️ Карта</button>
     <button class="btn" id="btnToggleLegend">📋 Справка ТЗ</button>
     <button class="btn" id="btnToggleLabels">🏷️ 3D-Метки</button>
     <button class="btn" id="btnRandomize" title="Сгенерировать случайные препятствия NFZ и цели">🎲 Новая карта (NFZ и цели)</button>
@@ -1210,7 +1210,10 @@
     const MAX_SPEED = 0.4;
     const ALT_MIN = 1.0;
     const ALT_MAX = 1.4;
+    // Полное расширение запретной зоны: 0,10 + 0,05 + 0,06 + 0,02 = 0,23 м.
     const BUFFER_INFLATION = 0.23;
+    // Маршрут строится ещё на 2 см дальше, чтобы округление сетки не касалось границы 0,23 м.
+    const ROUTE_CLEARANCE = 0.25;
     const DRONE_RADIUS = 0.10;
     const DRONE_COLLISION_DIST = 0.35;
 
@@ -1218,6 +1221,10 @@
     let chainRunning = false;
     let chainStage = 0;
     let activeDroneId = 1;
+    let currentMapRevision = 0;
+    const operationLog = [];
+    const finishedActionIds = new Set();
+    const uncertainActionIds = new Set();
 
     const nfzZones = [
       {
@@ -1235,10 +1242,10 @@
     ];
 
     nfzZones.forEach(z => {
-      z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
-      z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
-      z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
-      z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
+      z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION);
+      z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION);
+      z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION);
+      z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION);
     });
 
     const NFZ_MAX_Z = 2.5;
@@ -1595,7 +1602,7 @@
         padGroup.add(led);
       });
 
-      // Рядом с H-1: вышка наземной базовой станции RTK
+      // Рядом с H-1: наземный UWB-маяк
       if (!isExec) {
         const rtkPole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.35, 8), trussMat);
         rtkPole.rotation.x = Math.PI / 2;
@@ -1607,7 +1614,7 @@
         rtkPuck.position.set(-0.35, 0, 0.35);
         padGroup.add(rtkPuck);
       } else {
-        // Рядом с H-2: заправочная емкость биопрепарата (IBC-контейнер)
+        // Рядом с H-2: корпус контрольного UWB-маяка
         const tankBox = new THREE.Mesh(
           new THREE.BoxGeometry(0.14, 0.14, 0.18),
           new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.3, transparent: true, opacity: 0.85 })
@@ -1758,7 +1765,7 @@
       const pGroup = new THREE.Group();
 
       if (type === 'A' || type === 'A_NFZ') {
-        // СОРНЯК / ОЧАГ БОЛЕЗНИ (раскидистый сорняк с пятнистыми буро-желтыми больными листьями)
+        // Визуальная модель учебного класса A
         const stemMat = new THREE.MeshStandardMaterial({ color: 0x4d5320, roughness: 0.85 });
         const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.12, 8), stemMat);
         stem.rotation.x = Math.PI / 2;
@@ -1787,7 +1794,7 @@
           pGroup.add(leaf);
         }
 
-        // Соцветие / семенная головка сорняка
+        // Контрастный учебный признак класса A
         const weedHead = new THREE.Mesh(
           new THREE.DodecahedronGeometry(0.018),
           new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.6 })
@@ -1796,7 +1803,7 @@
         pGroup.add(weedHead);
 
       } else if (type === 'B') {
-        // ЗДОРОВАЯ КУЛЬТУРА (пышный здоровый куст томатов со спелыми плодами)
+        // Визуальная модель учебного класса B
         const stemMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 });
         const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.014, 0.14, 8), stemMat);
         stem.rotation.x = Math.PI / 2;
@@ -1805,7 +1812,7 @@
 
         const leafGeo = new THREE.PlaneGeometry(0.08, 0.034);
         const leafMatFresh = new THREE.MeshStandardMaterial({
-          color: 0x22c55e, // яркая здоровая сочная зелень
+          color: 0x22c55e,
           side: THREE.DoubleSide,
           roughness: 0.6
         });
@@ -2183,12 +2190,12 @@
         }
       }
 
-      // Пересчет зон безопасности (+ BUFFER_INFLATION + DRONE_RADIUS)
+      // Пересчёт зон безопасности. BUFFER_INFLATION уже включает радиус БПЛА.
       nfzZones.forEach(z => {
-        z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
-        z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
-        z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION) - DRONE_RADIUS;
-        z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION) + DRONE_RADIUS;
+        z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION);
+        z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION);
+        z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION);
+        z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION);
       });
 
       // Перемещение 3D-моделей оборудования
@@ -2206,6 +2213,7 @@
     }
 
     function generateRandomTargets() {
+      currentMapRevision++;
       // 1. Рандомизируем положение препятствий (NFZ-1 и NFZ-2)
       randomizeNfzPositions();
 
@@ -2236,6 +2244,7 @@
       // 2 очага намеренно внутри запретных зон NFZ (по ТЗ: проверка валидатора GCS):
       targetsData.push({
         id: 7,
+        actionId: `MAP-${currentMapRevision}-A7`,
         type: 'A_NFZ',
         name: 'Очаг A-7 (Внутри зоны NFZ-1)',
         x: z1.cx + (Math.random() - 0.5) * (z1.w * 0.40),
@@ -2245,6 +2254,7 @@
       });
       targetsData.push({
         id: 8,
+        actionId: `MAP-${currentMapRevision}-A8`,
         type: 'A_NFZ',
         name: 'Очаг A-8 (Внутри зоны NFZ-2)',
         x: z2.cx + (Math.random() - 0.5) * (z2.w * 0.40),
@@ -2257,8 +2267,9 @@
       function isInsideAnyNfzBarrier(px, py) {
         for (let i = 0; i < nfzZones.length; i++) {
           const z = nfzZones[i];
-          if (px >= z.barrierMinX && px <= z.barrierMaxX &&
-              py >= z.barrierMinY && py <= z.barrierMaxY) {
+          const extra = ROUTE_CLEARANCE - BUFFER_INFLATION;
+          if (px >= z.barrierMinX - extra && px <= z.barrierMaxX + extra &&
+              py >= z.barrierMinY - extra && py <= z.barrierMaxY + extra) {
             return true;
           }
         }
@@ -2285,6 +2296,7 @@
         }
         targetsData.push({
           id: idx + 1,
+          actionId: `MAP-${currentMapRevision}-A${idx + 1}`,
           type: 'A',
           name: z.name,
           x: tx,
@@ -2294,22 +2306,24 @@
         });
       });
 
-      // 1 здоровый участок B (томаты/культура):
+      // 1 участок учебного класса B:
       targetsData.push({
         id: 9,
+        actionId: `MAP-${currentMapRevision}-B9`,
         type: 'B',
-        name: 'Участок B-9 (Здоровая культура)',
+        name: 'Участок B-9 (Наблюдение)',
         x: 0.70 + Math.random() * 0.30,
         y: 1.90 + Math.random() * 0.50,
         discovered: false,
         treated: false
       });
 
-      // 1 сомнительный участок U (неопределенная текстура/дефект):
+      // 1 сомнительный участок U:
       targetsData.push({
         id: 10,
+        actionId: `MAP-${currentMapRevision}-U10`,
         type: 'U',
-        name: 'Участок U-10 (Неопределенный спектр)',
+        name: 'Участок U-10 (Неопределённая текстура)',
         x: 5.30 + Math.random() * 0.25,
         y: 0.70 + Math.random() * 0.40,
         discovered: false,
@@ -2339,13 +2353,13 @@
         ring.position.z = 0.002;
         tGroup.add(ring);
 
-        // 2. Условный радиус воздействия / пятно форсунки по ТЗ: r = 0.04 м
+        // 2. Условный радиус воздействия для геометрической проверки: r = 0,04 м
         const dotMat = new THREE.MeshBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.45 });
         const dot = new THREE.Mesh(new THREE.CircleGeometry(0.04, 16), dotMat);
         dot.position.z = 0.003;
         tGroup.add(dot);
 
-        // 3. Реалистичная 3D-модель растения по классу (сорняк A, культура B, сухой стебель U)
+        // 3. Различимые учебные модели классов A, B и U
         const plant = buildPlantModel(t.type);
         tGroup.add(plant);
 
@@ -2406,8 +2420,8 @@
 
       const isRecon = (role === 'recon');
 
-      // МАСШТАБ: БПЛА-2 (Поливщик/Исполнитель) ЗНАЧИТЕЛЬНО БОЛЬШЕ разведчика (в 2.2 раза!)
-      const armSpan = isRecon ? 0.11 : 0.24; // Размах 22 см vs 55 см!
+      // Визуальные модели разведчика и исполнителя различаются по размеру.
+      const armSpan = isRecon ? 0.08 : 0.09;
       const frameColor = isRecon ? 0xf8fafc : 0x0f172a;
       const accentColor = isRecon ? 0xea580c : 0x16a34a;
       const propFrontColor = isRecon ? 0xea580c : 0x22c55e;
@@ -2441,18 +2455,18 @@
         droneBody.add(gpsPuck);
       } else {
         // --- БПЛА-2: МОЩНЫЙ ТЯЖЕЛЫЙ АГРОНОМИЧЕСКИЙ ОПРЫСКИВАТЕЛЬ (БОЛЬШОЙ КОРПУС) ---
-        const heavyBottom = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.012), carbonMat);
+        const heavyBottom = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.010), carbonMat);
         droneBody.add(heavyBottom);
 
-        const heavyTop = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.010), carbonMat);
+        const heavyTop = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.008), carbonMat);
         heavyTop.position.set(0, 0, 0.04);
         droneBody.add(heavyTop);
 
-        const industrialCockpit = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.045), accentMat);
+        const industrialCockpit = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.035), accentMat);
         industrialCockpit.position.set(0, 0, 0.065);
         droneBody.add(industrialCockpit);
 
-        // Мощная двухмачтовая антенна RTK GNSS
+        // Два визуальных элемента мобильной UWB-метки
         [-0.07, 0.07].forEach(ax => {
           const mPost = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.06, 8), carbonMat);
           mPost.rotation.x = Math.PI / 2;
@@ -2478,15 +2492,15 @@
 
       motorPositions.forEach(mp => {
         const armLength = Math.sqrt(mp.x * mp.x + mp.y * mp.y);
-        const armThickness = isRecon ? 0.012 : 0.026;
-        const armHeight = isRecon ? 0.006 : 0.014;
+        const armThickness = isRecon ? 0.010 : 0.012;
+        const armHeight = isRecon ? 0.006 : 0.008;
         const arm = new THREE.Mesh(new THREE.BoxGeometry(armLength, armThickness, armHeight), carbonMat);
         arm.position.set(mp.x / 2, mp.y / 2, isRecon ? 0.01 : 0.02);
         arm.rotation.z = Math.atan2(mp.y, mp.x);
         droneBody.add(arm);
 
-        const motR = isRecon ? 0.016 : 0.032;
-        const motH = isRecon ? 0.016 : 0.030;
+        const motR = isRecon ? 0.014 : 0.016;
+        const motH = isRecon ? 0.014 : 0.016;
         const motor = new THREE.Mesh(new THREE.CylinderGeometry(motR, motR, motH, 16), motorMat);
         motor.rotation.x = Math.PI / 2;
         motor.position.set(mp.x, mp.y, isRecon ? 0.02 : 0.04);
@@ -2498,9 +2512,8 @@
         const bladeColor = mp.front ? propFrontColor : propRearColor;
         const bladeMat = new THREE.MeshStandardMaterial({ color: bladeColor, roughness: 0.3 });
 
-        // У поливщика пропеллеры более чем в 2 раза длиннее (агродроны)
-        const bladeLen = isRecon ? 0.11 : 0.25;
-        const bladeW = isRecon ? 0.014 : 0.028;
+        const bladeLen = isRecon ? 0.09 : 0.10;
+        const bladeW = isRecon ? 0.012 : 0.014;
         const blade = new THREE.Mesh(new THREE.BoxGeometry(bladeLen, bladeW, 0.003), bladeMat);
         propGroup.add(blade);
 
@@ -2531,7 +2544,7 @@
         droneBody.add(navLed);
       });
 
-      // Для поливщика: широкие трубчатые лыжи (шасси агродрона)
+      // Широкие трубчатые лыжи исполнителя
       if (!isRecon) {
         [-0.14, 0.14].forEach(ly => {
           // Вертикальные стойки лыж
@@ -2542,7 +2555,7 @@
             droneBody.add(strut);
           });
           // Горизонтальная лыжа
-          const skid = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.36, 10), carbonMat);
+          const skid = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.18, 10), carbonMat);
           skid.rotation.y = Math.PI / 2;
           skid.position.set(0, ly, -0.08);
           droneBody.add(skid);
@@ -2618,58 +2631,13 @@
         scene.add(frustumGroup);
         cameraFrustum = frustumGroup;
       } else {
-        // --- ОБОРУДОВАНИЕ БПЛА-2 (ПОЛИВЩИК): БОЛЬШОЙ РЕЗЕРВУАР БИОПРЕПАРАТА + ШТАНГИ ОПРЫСКИВАНИЯ ---
-        // 1. Огромный агрохимический бак (в 2.5 раза больше!)
-        const tankGeo = new THREE.CylinderGeometry(0.082, 0.082, 0.115, 24);
-        const tankMat = new THREE.MeshStandardMaterial({
-          color: 0x15803d, // Зеленая жидкая полезная нагрузка
-          transparent: true,
-          opacity: 0.85,
-          roughness: 0.25,
-          metalness: 0.15
-        });
-        const tankMesh = new THREE.Mesh(tankGeo, tankMat);
-        tankMesh.rotation.x = Math.PI / 2;
-        tankMesh.position.set(0, 0, 0.115);
-        droneBody.add(tankMesh);
-
-        // Горловина бака
-        const capGeo = new THREE.CylinderGeometry(0.026, 0.026, 0.020, 16);
-        const capMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
-        const capMesh = new THREE.Mesh(capGeo, capMat);
-        capMesh.rotation.x = Math.PI / 2;
-        capMesh.position.set(0, 0, 0.175);
-        droneBody.add(capMesh);
-
-        // Смотровые трубки уровня жидкости с обеих сторон
-        [-0.084, 0.084].forEach(gx => {
-          const gaugeMesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.014, 0.085),
-            new THREE.MeshBasicMaterial({ color: 0x4ade80, side: THREE.DoubleSide })
-          );
-          gaugeMesh.position.set(gx, 0, 0.115);
-          gaugeMesh.rotation.y = Math.PI / 2;
-          droneBody.add(gaugeMesh);
-        });
-
-        // 2. Две широкие распылительные штанги под лучами с 4 распылителями
-        const sprayBoom = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.007, 0.007, 0.46, 12),
-          new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.85 })
+        // --- УЧЕБНАЯ НАГРУЗКА БПЛА-2: СВЕТОВОЙ ИНДИКАТОР ---
+        const payloadHousing = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.06, 0.025),
+          new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.35, metalness: 0.25 })
         );
-        sprayBoom.position.set(0, 0, -0.04);
-        droneBody.add(sprayBoom);
-
-        // 4 распылительные форсунки вдоль штанги
-        [-0.20, -0.07, 0.07, 0.20].forEach(nx => {
-          const nozz = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.010, 0.014, 0.022, 12),
-            new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.9 })
-          );
-          nozz.rotation.x = Math.PI / 2;
-          nozz.position.set(nx, 0, -0.052);
-          droneBody.add(nozz);
-        });
+        payloadHousing.position.set(0, 0, -0.025);
+        droneBody.add(payloadHousing);
 
         // Центральный мощный светодиод по ТЗ
         const lamp = new THREE.Mesh(
@@ -2688,30 +2656,11 @@
         droneBody.add(payloadSpot);
         droneBody.add(payloadSpot.target);
 
-        // 3. Широкая система частиц тумана опрыскивания (от 4 форсунок)
-        const mistCount = 120;
-        const mistGeo = new THREE.BufferGeometry();
-        const mistPos = new Float32Array(mistCount * 3);
-        for (let i = 0; i < mistCount * 3; i += 3) {
-          mistPos[i] = (Math.random() - 0.5) * 0.42;
-          mistPos[i + 1] = (Math.random() - 0.5) * 0.12;
-          mistPos[i + 2] = -0.06 - Math.random() * 1.25;
-        }
-        mistGeo.setAttribute('position', new THREE.BufferAttribute(mistPos, 3));
-        const mistMat = new THREE.PointsMaterial({
-          color: 0x4ade80,
-          size: 0.026,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false
-        });
-        const mistPoints = new THREE.Points(mistGeo, mistMat);
-        droneBody.add(mistPoints);
-        droneBody.userData.mistPoints = mistPoints;
+        droneBody.userData.mistPoints = null;
       }
 
       // Тень под дроном (соответствует габаритам аппарата)
-      const shadowR = isRecon ? 0.08 : 0.20;
+      const shadowR = isRecon ? 0.07 : 0.08;
       const shadow = new THREE.Mesh(
         new THREE.RingGeometry(shadowR, shadowR + 0.03, 32),
         new THREE.MeshBasicMaterial({ color: accentColor, opacity: 0.6, transparent: true })
@@ -2752,7 +2701,9 @@
         for (let s = 1; s < steps; s++) {
           const px = p1.x + (p2.x - p1.x) * (s / steps);
           const py = p1.y + (p2.y - p1.y) * (s / steps);
-          if (px > z.barrierMinX && px < z.barrierMaxX && py > z.barrierMinY && py < z.barrierMaxY) {
+          const extra = ROUTE_CLEARANCE - BUFFER_INFLATION;
+          if (px > z.barrierMinX - extra && px < z.barrierMaxX + extra &&
+              py > z.barrierMinY - extra && py < z.barrierMaxY + extra) {
             return true;
           }
         }
@@ -2769,8 +2720,8 @@
         return [pEnd];
       }
 
-      // Безопасный буфер: BUFFER_INFLATION (0.23) + DRONE_RADIUS (0.10) + запас = 0.35 м
-      const clearance = 0.35;
+      // BUFFER_INFLATION уже содержит радиус БПЛА, запас и обе ошибки привязки.
+      const clearance = ROUTE_CLEARANCE;
       const grid = new Uint8Array(ASTAR_COLS * ASTAR_ROWS);
 
       nfzZones.forEach(z => {
@@ -2856,7 +2807,7 @@
       }
 
       if (!found) {
-        return [pEnd];
+        return [];
       }
 
       const rawPath = [];
@@ -2869,7 +2820,9 @@
         curr = parent[curr];
       }
       rawPath.reverse();
-      rawPath[rawPath.length - 1] = { x: pEnd.x, y: pEnd.y, z: pEnd.z || 1.2 };
+      // Сохраняем action и targetId. Иначе цель после обхода препятствия
+      // превращалась в обычную путевую точку и светодиод не включался.
+      rawPath[rawPath.length - 1] = { ...pEnd, x: pEnd.x, y: pEnd.y, z: pEnd.z || 1.2 };
 
       // Сглаживание траектории (прямая видимость с барьерами безопасности):
       const smoothed = [];
@@ -2929,6 +2882,11 @@
         const pStart = fullPath[fullPath.length - 1];
         const pEnd = blindSwaths[i + 1];
         const leg = getShortestLegDijkstra(pStart, pEnd);
+        if (leg.length === 0) {
+          // Безопаснее завершить разведку на месте, чем пересечь запретную зону.
+          fullPath.push({ x: pStart.x, y: pStart.y, z: 0.08 });
+          return fullPath;
+        }
         for (const pt of leg) {
           fullPath.push(pt);
         }
@@ -2991,7 +2949,7 @@
 
         // Строгая валидация GCS:
         // 1. Отбраковка целей внутри запретных зон NFZ
-        // 2. Отбраковка сорняков (B)
+        // 2. Отбраковка объектов класса B
         // 3. Отбраковка неопознанных (U)
         // 4. Допуск только подтвержденных очагов Класса A
         if (t.type === 'A' && !insideNFZ && !t.nfz) {
@@ -3017,6 +2975,7 @@
 
       let currentPos = { x: 0.40, y: 1.20 };
       const unvisited = [...acceptedTargets];
+      let plannedTargetCount = 0;
 
       while (unvisited.length > 0) {
         let bestIdx = 0;
@@ -3032,20 +2991,29 @@
         const target = unvisited.splice(bestIdx, 1)[0];
         const targetWp = { x: target.x, y: target.y, z: 1.2, action: true, targetId: target.id };
         const leg = getShortestLeg(currentPos, targetWp);
+        if (leg.length === 0) {
+          continue;
+        }
         leg.forEach(pt => waypoints.push(pt));
+        plannedTargetCount++;
         currentPos = { x: target.x, y: target.y };
       }
 
       // Кратчайший безопасный возврат на площадку Home-2:
       const homeWp = { x: 0.40, y: 1.20, z: 1.2 };
       const returnLeg = getShortestLeg(currentPos, homeWp);
-      returnLeg.forEach(pt => waypoints.push(pt));
-      waypoints.push({ x: 0.40, y: 1.20, z: 0.08 }); // Точная посадка на Home-2
+      if (returnLeg.length > 0) {
+        returnLeg.forEach(pt => waypoints.push(pt));
+        waypoints.push({ x: 0.40, y: 1.20, z: 0.08 }); // Точная посадка на Home-2
+      } else {
+        // Если безопасного возврата нет, посадка выполняется в текущей разрешённой точке.
+        waypoints.push({ x: currentPos.x, y: currentPos.y, z: 0.08 });
+      }
 
       drone2State.waypoints = waypoints;
       updateRouteLine(waypoints);
 
-      return acceptedTargets.length;
+      return plannedTargetCount;
     }
 
     const drone1State = {
@@ -3072,6 +3040,7 @@
       autoPilot: false,
       payloadActive: false,
       payloadTimeLeft: 0,
+      activePayloadTarget: null,
       actionDone: false,
       stabilizeTimer: 0,
       waypoints: [],
@@ -3381,6 +3350,10 @@
       drone2State.fsm = 'READY (HOME-2)';
       drone2State.autoIdx = 0;
       drone2State.payloadActive = false;
+      drone2State.payloadTimeLeft = 0;
+      drone2State.activePayloadTarget = null;
+      drone2State.actionDone = false;
+      drone2State.stabilizeTimer = 0;
 
       generateRandomTargets();
       plannedReconWaypoints = generateBoustrophedonReconPath();
@@ -3407,17 +3380,81 @@
       });
     };
 
-    function triggerPayloadLED() {
-      if (drone2State.z >= ALT_MIN && drone2State.z <= ALT_MAX) {
-        drone2State.payloadActive = true;
-        drone2State.payloadTimeLeft = 2.0;
-        drone2Obj.payloadLamp.material.color.setHex(0x22c55e);
-        drone2Obj.payloadSpot.intensity = 3.5;
-        document.getElementById('payloadLed').classList.add('active');
-        document.getElementById('payloadText').textContent = 'АКТИВНА (2.0с)';
-      } else {
-        alert(`Ошибка включения нагрузки! Высота ${drone2State.z.toFixed(2)} м вне коридора допуска [1.0 - 1.4 м]`);
+    function getPayloadPermission() {
+      const speed = Math.hypot(drone2State.vx, drone2State.vy);
+      if (drone2State.z < ALT_MIN || drone2State.z > ALT_MAX) {
+        return { allowed: false, reason: `высота ${drone2State.z.toFixed(2)} м вне коридора 1,0-1,4 м` };
       }
+      if (speed > 0.05) {
+        return { allowed: false, reason: `скорость ${speed.toFixed(2)} м/с выше допуска стабилизации` };
+      }
+      const candidates = targetMeshes
+        .filter(tm => tm.data.discovered && tm.data.type === 'A' && !tm.data.treated)
+        .map(tm => ({ tm, dist: Math.hypot(drone2State.x - tm.data.x, drone2State.y - tm.data.y) }))
+        .sort((a, b) => a.dist - b.dist);
+      if (candidates.length === 0 || candidates[0].dist > 0.06) {
+        return { allowed: false, reason: 'нет подтверждённой цели A в пределах 0,06 м' };
+      }
+      const target = candidates[0].tm.data;
+      if (finishedActionIds.has(target.actionId) || uncertainActionIds.has(target.actionId)) {
+        return { allowed: false, reason: `повтор action_id ${target.actionId} запрещён` };
+      }
+      const insideNfz = nfzZones.some(z =>
+        drone2State.x >= z.barrierMinX && drone2State.x <= z.barrierMaxX &&
+        drone2State.y >= z.barrierMinY && drone2State.y <= z.barrierMaxY
+      );
+      if (insideNfz) {
+        return { allowed: false, reason: 'позиция находится в расширенной запретной зоне' };
+      }
+      return { allowed: true, reason: '', target };
+    }
+
+    function recordOperation(event, target, reason = '') {
+      operationLog.push({
+        time: new Date().toISOString(),
+        event,
+        action_id: target ? target.actionId : null,
+        target_id: target ? target.id : null,
+        x: drone2State.x,
+        y: drone2State.y,
+        z: drone2State.z,
+        reason
+      });
+    }
+
+    function stopPayload(reason, uncertain = true) {
+      const target = drone2State.activePayloadTarget || null;
+      drone2State.payloadActive = false;
+      drone2State.payloadTimeLeft = 0;
+      drone2Obj.payloadLamp.material.color.setHex(0x334155);
+      drone2Obj.payloadSpot.intensity = 0;
+      if (drone2Obj.body.userData.mistPoints) {
+        drone2Obj.body.userData.mistPoints.material.opacity = 0;
+      }
+      document.getElementById('payloadLed').classList.remove('active');
+      document.getElementById('payloadText').textContent = uncertain ? 'ОСТАНОВЛЕНА: НУЖНА ПРОВЕРКА' : 'ГОТОВ';
+      if (target && uncertain) uncertainActionIds.add(target.actionId);
+      recordOperation(uncertain ? 'UNCERTAIN' : 'STOPPED', target, reason);
+      drone2State.activePayloadTarget = null;
+    }
+
+    function triggerPayloadLED() {
+      if (drone2State.payloadActive) return false;
+      const permission = getPayloadPermission();
+      if (!permission.allowed) {
+        recordOperation('DENIED', null, permission.reason);
+        if (!drone2State.autoPilot) alert(`Включение запрещено: ${permission.reason}`);
+        return false;
+      }
+      drone2State.activePayloadTarget = permission.target;
+      drone2State.payloadActive = true;
+      drone2State.payloadTimeLeft = 2.0;
+      drone2Obj.payloadLamp.material.color.setHex(0x22c55e);
+      drone2Obj.payloadSpot.intensity = 3.5;
+      document.getElementById('payloadLed').classList.add('active');
+      document.getElementById('payloadText').textContent = 'АКТИВНА (2.0с)';
+      recordOperation('LED_ON', permission.target);
+      return true;
     }
 
 // (chainRunning & chainStage hoisted to top)
@@ -3541,27 +3578,27 @@
             if (dx <= w + 0.12 && dy <= d + 0.12) {
               t.discovered = true;
               let col = 0x22c55e;
-              let title = `ОЧАГ A-${t.id} (СОРНЯК)`;
-              let sub = '⚠️ Требуется опрыскивание 2.0с (R=0.25м)';
+              let title = `УЧАСТОК A-${t.id}`;
+              let sub = 'Назначена учебная световая операция 2,0 с (R=0,25 м)';
               let colStr = '#f97316';
               let ico = '🎯';
 
               if (t.type === 'B') {
                 col = 0x3b82f6;
-                title = 'УЧАСТОК B (КУЛЬТУРА)';
-                sub = '🌿 Здоровая культура · Без химии';
+                title = 'УЧАСТОК B';
+                sub = 'Только наблюдение. Операция не назначена.';
                 colStr = '#3b82f6';
                 ico = '🌿';
               } else if (t.type === 'U') {
                 col = 0xa855f7;
-                title = 'УЧАСТОК U (НЕОПРЕДЕЛЕНО)';
-                sub = '❓ Сомнительный спектр · Пропуск по ТЗ';
+                title = 'УЧАСТОК U';
+                sub = 'Неопределённый класс. Операция запрещена.';
                 colStr = '#a855f7';
                 ico = '❓';
               } else if (t.type === 'A_NFZ') {
                 col = 0xef4444;
-                title = `ОЧАГ A-${t.id} (В ЗОНЕ NFZ)`;
-                sub = '⛔ Влёт и обработка ЗАПРЕЩЕНЫ ТЗ!';
+                title = `УЧАСТОК A-${t.id} (В ЗАПРЕТНОЙ ЗОНЕ)`;
+                sub = 'Полёт и операция запрещены.';
                 colStr = '#ef4444';
                 ico = '🚫';
               }
@@ -3574,7 +3611,7 @@
               if (tm.sprite) {
                 tm.sprite.material.opacity = 1.0;
                 let shortLbl = `A-${t.id}`;
-                if (t.type === 'B') shortLbl = 'Культура B';
+                if (t.type === 'B') shortLbl = 'Класс B';
                 if (t.type === 'U') shortLbl = 'Объект U';
                 if (t.type === 'A_NFZ') shortLbl = `NFZ-${t.id}`;
                 tm.sprite.update(shortLbl, colStr, ico);
@@ -3681,10 +3718,22 @@
           st.targetZ = wp.z;
           st.fsm = `NAV_WP_${st.autoIdx + 1}/${st.waypoints.length}`;
 
-          // Аварийный таймаут точки только при реальном застревании в препятствии более 15 секунд
+          // При застревании маршрут перестраивается. Точка молча не пропускается.
           if (st.waypointStuckTimer > 15.0) {
-            st.autoIdx++;
+            const replanned = getShortestLegDijkstra(
+              { x: st.x, y: st.y, z: st.z },
+              wp
+            );
             st.waypointStuckTimer = 0;
+            if (replanned.length > 0) {
+              st.waypoints.splice(st.autoIdx, 1, ...replanned);
+            } else {
+              st.autoPilot = false;
+              chainRunning = false;
+              st.fsm = 'SAFE_STOP_NO_ROUTE';
+              if (st.payloadActive) stopPayload('безопасный маршрут не найден', true);
+              showPhaseBanner('БЕЗОПАСНАЯ ОСТАНОВКА: маршрут к следующей точке не найден.');
+            }
           }
         } else {
           st.waypointStuckTimer = 0;
@@ -3695,8 +3744,9 @@
               st.stabilizeTimer += dt;
               st.fsm = `STABILIZE_${(1.0 - st.stabilizeTimer).toFixed(1)}s`;
             } else if (st.payloadTimeLeft <= 0 && !st.actionDone) {
-              triggerPayloadLED();
-              st.actionDone = true;
+              if (triggerPayloadLED()) {
+                st.actionDone = true;
+              }
             } else if (st.payloadTimeLeft > 0) {
               st.fsm = `ACTION_${st.payloadTimeLeft.toFixed(1)}s`;
             } else {
@@ -3727,7 +3777,7 @@
                 obj.cameraFrustum.visible = false;
                 const acceptedCount = planExecutorMissionFromMemory();
                 showPhaseBanner(`ЭТАП 2 (GCS): Разведка завершена (${drone1State.memory.length}/10 целей). 2 цели в NFZ отклонены, 2 некорректных отклонены. Принято ${acceptedCount} очагов A. Безопасный маршрут готов!`);
-                setTimeout(() => {
+                const startExecutor = () => {
                   chainStage = 3;
                   updatePipelineStep(3);
                   setActiveDrone(2);
@@ -3736,7 +3786,12 @@
                   drone2State.targetZ = NOMINAL_ALT;
                   drone2State.fsm = 'EXEC_MISSION';
                   showPhaseBanner(`ЭТАП 3: БПЛА-Исполнитель автономно обходит NFZ, обрабатывает ${acceptedCount} очагов A светодиодом (2с) и возвращается на Home-2.`);
-                }, 2800 / simSpeed);
+                };
+                if (window.__MISSION_SMOKE_TEST__) {
+                  startExecutor();
+                } else {
+                  setTimeout(startExecutor, 2800 / simSpeed);
+                }
               } else if (chainRunning && chainStage === 3) {
                 chainRunning = false;
                 chainStage = 4;
@@ -3761,7 +3816,9 @@
                 const btnRun = document.getElementById('btnRunChain');
                 if (btnRun) btnRun.textContent = '✅ Миссия завершена';
 
-                showPhaseBanner("✅ МИССИЯ ЗАВЕРШЕНА: Все 6 очагов A обработаны, точная посадка в центр Home-2, 0 нарушений NFZ!");
+                const completedCount = targetsData.filter(t => t.type === 'A' && t.treated).length;
+                const availableCount = targetsData.filter(t => t.type === 'A').length;
+                showPhaseBanner(`✅ МИССИЯ ЗАВЕРШЕНА: подтверждено ${completedCount} из ${availableCount} доступных операций A, посадка Home-2, нарушений запретных зон нет.`);
               }
             }
           } else {
@@ -3881,30 +3938,27 @@
       });
 
       if (st.role === 'executor' && st.payloadActive) {
+        const continuousPermission = getPayloadPermission();
+        if (!continuousPermission.allowed || continuousPermission.target.actionId !== st.activePayloadTarget.actionId) {
+          stopPayload(continuousPermission.reason || 'изменился идентификатор разрешённой цели', true);
+          st.fsm = 'SAFE_STOP';
+          st.autoPilot = false;
+          return;
+        }
         st.payloadTimeLeft -= dt;
 
-        // Анимация частиц агрораспыления тумана
+        // В кейсе применяется только световой индикатор. Частицы распыления не включаются.
         if (obj.body.userData.mistPoints) {
           const mp = obj.body.userData.mistPoints;
-          mp.material.opacity = 0.85;
-          const posArr = mp.geometry.attributes.position.array;
-          const mistH = Math.max(st.z, 0.1);
-          for (let i = 2; i < posArr.length; i += 3) {
-            posArr[i] -= 3.5 * dt;
-            if (posArr[i] < -mistH) {
-              posArr[i] = -0.02;
-              posArr[i - 2] = (Math.random() - 0.5) * 0.04;
-              posArr[i - 1] = (Math.random() - 0.5) * 0.04;
-            }
-          }
-          mp.geometry.attributes.position.needsUpdate = true;
+          mp.material.opacity = 0;
         }
 
         if (false) {
-          obj.tagSprite.update('БПЛА-2 (ОПРЫСКИВАНИЕ)', `💧 Внесение биопрепарата (${st.payloadTimeLeft.toFixed(1)}с)`, '#22c55e', '💡');
+          obj.tagSprite.update('БПЛА-2 (СВЕТОВАЯ ОПЕРАЦИЯ)', `LED включён (${st.payloadTimeLeft.toFixed(1)}с)`, '#22c55e', '💡');
         }
 
         if (st.payloadTimeLeft <= 0) {
+          const completedTarget = st.activePayloadTarget;
           st.payloadActive = false;
           st.payloadTimeLeft = 0;
           obj.payloadLamp.material.color.setHex(0x334155);
@@ -3914,13 +3968,17 @@
             obj.body.userData.mistPoints.material.opacity = 0;
           }
           if (false) {
-            obj.tagSprite.update('БПЛА-2 (ИСПОЛНИТЕЛЬ)', '💧 Бак биопрепарата + Форсунка', '#15803d', '🛸');
+            obj.tagSprite.update('БПЛА-2 (ИСПОЛНИТЕЛЬ)', 'Световой индикатор', '#15803d', '🛸');
           }
 
           // Пометить обработанный очаг в 3D:
           const currWp = st.waypoints[st.autoIdx];
-          if (currWp && currWp.targetId) {
-            const tm = targetMeshes.find(m => m.data.id === currWp.targetId);
+          if (completedTarget) {
+            finishedActionIds.add(completedTarget.actionId);
+            recordOperation('CONFIRMED', completedTarget);
+          }
+          if (currWp && currWp.targetId && completedTarget) {
+            const tm = targetMeshes.find(m => m.data.id === currWp.targetId && m.data.actionId === completedTarget.actionId);
             if (tm) {
               tm.data.treated = true;
               tm.ringMesh.material.color.setHex(0x22c55e);
@@ -3931,6 +3989,7 @@
               }
             }
           }
+          st.activePayloadTarget = null;
 
           if (isControlled) {
             document.getElementById('payloadLed').classList.remove('active');
@@ -4160,6 +4219,35 @@
     });
 
     animate();
+
+    // Режим используется только для воспроизводимой автоматической проверки в браузере.
+    const query = new URLSearchParams(window.location.search);
+    window.__MISSION_SMOKE_TEST__ = query.get('smoketest') === '1';
+    if (query.get('autostart') === '1') {
+      const requestedSpeed = Number(query.get('speed') || '8');
+      simSpeed = [1, 2, 4, 8].includes(requestedSpeed) ? requestedSpeed : 8;
+      setTimeout(() => document.getElementById('btnRunChain').click(), 250);
+    }
+    if (window.__MISSION_SMOKE_TEST__) {
+      setTimeout(() => {
+        document.getElementById('btnRunChain').click();
+        for (let step = 0; step < 120000 && chainStage < 4; step++) {
+          updateDronePhysics(drone1State, drone1Obj, activeDrone === drone1State, 0.02);
+          updateDronePhysics(drone2State, drone2Obj, activeDrone === drone2State, 0.02);
+          enforceDroneToDroneCollision();
+        }
+        const treated = targetsData.filter(t => t.type === 'A' && t.treated).length;
+        document.documentElement.dataset.smokeResult = chainStage === 4 && treated === 6 ? 'passed' : 'failed';
+        document.documentElement.dataset.smokeStage = String(chainStage);
+        document.documentElement.dataset.smokeTreated = String(treated);
+        document.documentElement.dataset.smokeMemory = String(drone1State.memory.length);
+        document.documentElement.dataset.smokeReconState = `${drone1State.fsm}:${drone1State.autoIdx}/${drone1State.waypoints.length}:${drone1State.x.toFixed(2)},${drone1State.y.toFixed(2)},${drone1State.z.toFixed(2)}`;
+        document.documentElement.dataset.smokePlannedIds = [...new Set(drone2State.waypoints.filter(wp => wp.targetId).map(wp => wp.targetId))].join(',');
+        document.documentElement.dataset.smokeTreatedIds = targetsData.filter(t => t.type === 'A' && t.treated).map(t => t.id).join(',');
+        document.documentElement.dataset.smokeTargets = targetsData.map(t => `${t.id}:${t.type}:${t.x.toFixed(2)},${t.y.toFixed(2)}:${t.discovered ? 1 : 0}`).join('|');
+        document.documentElement.dataset.smokeEvents = operationLog.map(item => `${item.event}:${item.target_id || ''}:${item.reason || ''}`).join('|');
+      }, 250);
+    }
   </script>
 </body>
 </html>

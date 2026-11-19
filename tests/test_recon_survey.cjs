@@ -1,6 +1,16 @@
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
 const test = require('node:test');
-const { plan, crossesInterior } = require('../simulation_3d/recon_survey.js');
+const { runInThisContext } = require('node:vm');
+
+const html = readFileSync(join(__dirname, '../simulation_3d/index.html'), 'utf8');
+const planner = html.match(/<script id="recon-survey">([\s\S]*?)<\/script>/);
+assert.ok(planner, 'the survey planner must be bundled with the page');
+const { plan, crossesInterior } = runInThisContext(
+  '(function () {' + planner[1] + '\nreturn ReconSurvey;\n})()',
+  { filename: 'index.html#recon-survey' }
+);
 
 const config = {
   width: 6, height: 4, clearance: 0.25,

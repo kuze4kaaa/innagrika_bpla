@@ -2688,30 +2688,18 @@
         gpsPuck.position.set(-0.035, 0, 0.06);
         droneBody.add(gpsPuck);
       } else {
-        // --- БПЛА-2: МОЩНЫЙ ТЯЖЕЛЫЙ АГРОНОМИЧЕСКИЙ ОПРЫСКИВАТЕЛЬ (БОЛЬШОЙ КОРПУС) ---
-        const heavyBottom = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.010), carbonMat);
-        droneBody.add(heavyBottom);
+        // Корпус, крышка и одна плоская UWB-метка прилегают друг к другу.
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.032), carbonMat);
+        frame.position.z = 0.006;
+        droneBody.add(frame);
 
-        const heavyTop = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.008), carbonMat);
-        heavyTop.position.set(0, 0, 0.04);
-        droneBody.add(heavyTop);
+        const cover = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.072, 0.028), accentMat);
+        cover.position.z = 0.034;
+        droneBody.add(cover);
 
-        const industrialCockpit = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.035), accentMat);
-        industrialCockpit.position.set(0, 0, 0.065);
-        droneBody.add(industrialCockpit);
-
-        // Два визуальных элемента мобильной UWB-метки
-        [-0.07, 0.07].forEach(ax => {
-          const mPost = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.06, 8), carbonMat);
-          mPost.rotation.x = Math.PI / 2;
-          mPost.position.set(-0.08, ax, 0.07);
-          droneBody.add(mPost);
-
-          const mPuck = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.008, 16), carbonMat);
-          mPuck.rotation.x = Math.PI / 2;
-          mPuck.position.set(-0.08, ax, 0.10);
-          droneBody.add(mPuck);
-        });
+        const uwbTag = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.024, 0.008), motorMat);
+        uwbTag.position.set(-0.02, 0, 0.051);
+        droneBody.add(uwbTag);
       }
 
       // 4 мотора и лучи (с учетом размаха для каждого дрона)
@@ -2723,38 +2711,39 @@
       ];
 
       const propellers = [];
+      const armGeometry = new THREE.BoxGeometry(Math.hypot(armSpan, armSpan), isRecon ? 0.010 : 0.014, isRecon ? 0.006 : 0.012);
+      const motorRadius = isRecon ? 0.014 : 0.016;
+      const motorGeometry = new THREE.CylinderGeometry(motorRadius, motorRadius, isRecon ? 0.014 : 0.018, isRecon ? 16 : 8);
+      const bladeGeometry = new THREE.BoxGeometry(isRecon ? 0.09 : 0.10, isRecon ? 0.012 : 0.014, 0.003);
+      const frontBladeMaterial = new THREE.MeshStandardMaterial({ color: propFrontColor, roughness: 0.3 });
+      const rearBladeMaterial = new THREE.MeshStandardMaterial({ color: propRearColor, roughness: 0.3 });
+      const navLedGeometry = new THREE.SphereGeometry(isRecon ? 0.005 : 0.007, isRecon ? 8 : 6, isRecon ? 8 : 4);
+      const frontLedMaterial = new THREE.MeshBasicMaterial({ color: 0x22c55e });
+      const rearLedMaterial = new THREE.MeshBasicMaterial({ color: 0xef4444 });
 
       motorPositions.forEach(mp => {
-        const armLength = Math.sqrt(mp.x * mp.x + mp.y * mp.y);
-        const armThickness = isRecon ? 0.010 : 0.012;
-        const armHeight = isRecon ? 0.006 : 0.008;
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(armLength, armThickness, armHeight), carbonMat);
-        arm.position.set(mp.x / 2, mp.y / 2, isRecon ? 0.01 : 0.02);
+        const arm = new THREE.Mesh(armGeometry, carbonMat);
+        arm.position.set(mp.x / 2, mp.y / 2, isRecon ? 0.01 : 0.018);
         arm.rotation.z = Math.atan2(mp.y, mp.x);
         droneBody.add(arm);
 
-        const motR = isRecon ? 0.014 : 0.016;
-        const motH = isRecon ? 0.014 : 0.016;
-        const motor = new THREE.Mesh(new THREE.CylinderGeometry(motR, motR, motH, 16), motorMat);
+        const motor = new THREE.Mesh(motorGeometry, motorMat);
         motor.rotation.x = Math.PI / 2;
-        motor.position.set(mp.x, mp.y, isRecon ? 0.02 : 0.04);
+        motor.position.set(mp.x, mp.y, isRecon ? 0.02 : 0.031);
         droneBody.add(motor);
 
         const propGroup = new THREE.Group();
-        propGroup.position.set(mp.x, mp.y, isRecon ? 0.03 : 0.055);
+        propGroup.position.set(mp.x, mp.y, isRecon ? 0.03 : 0.0415);
 
-        const bladeColor = mp.front ? propFrontColor : propRearColor;
-        const bladeMat = new THREE.MeshStandardMaterial({ color: bladeColor, roughness: 0.3 });
-
-        const bladeLen = isRecon ? 0.09 : 0.10;
-        const bladeW = isRecon ? 0.012 : 0.014;
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(bladeLen, bladeW, 0.003), bladeMat);
+        const blade = new THREE.Mesh(bladeGeometry, mp.front ? frontBladeMaterial : rearBladeMaterial);
         propGroup.add(blade);
 
-        const nut = new THREE.Mesh(new THREE.ConeGeometry(isRecon ? 0.005 : 0.010, isRecon ? 0.008 : 0.016, 12), motorMat);
-        nut.rotation.x = Math.PI / 2;
-        nut.position.z = 0.005;
-        propGroup.add(nut);
+        if (isRecon) {
+          const nut = new THREE.Mesh(new THREE.ConeGeometry(0.005, 0.008, 12), motorMat);
+          nut.rotation.x = Math.PI / 2;
+          nut.position.z = 0.005;
+          propGroup.add(nut);
+        }
 
         droneBody.add(propGroup);
         propellers.push(propGroup);
@@ -2770,28 +2759,24 @@
           droneBody.add(foot);
         }
 
-        const navLed = new THREE.Mesh(
-          new THREE.SphereGeometry(isRecon ? 0.005 : 0.009, 8, 8),
-          new THREE.MeshBasicMaterial({ color: mp.front ? 0x22c55e : 0xef4444 })
-        );
-        navLed.position.set(mp.x, mp.y, 0.01);
+        const navLed = new THREE.Mesh(navLedGeometry, mp.front ? frontLedMaterial : rearLedMaterial);
+        navLed.position.set(mp.x, mp.y, isRecon ? 0.01 : 0.014);
         droneBody.add(navLed);
       });
 
-      // Широкие трубчатые лыжи исполнителя
+      // Стойки проходят от диагональных лучей до посадочных лыж.
       if (!isRecon) {
-        [-0.14, 0.14].forEach(ly => {
-          // Вертикальные стойки лыж
-          [-0.10, 0.10].forEach(lx => {
-            const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.09, 8), carbonMat);
-            strut.rotation.x = Math.PI / 2;
-            strut.position.set(lx, ly, -0.035);
+        const mount = 0.07;
+        const strutGeometry = new THREE.BoxGeometry(0.012, 0.012, 0.068);
+        const skidGeometry = new THREE.BoxGeometry(0.168, 0.014, 0.010);
+        [-mount, mount].forEach(ly => {
+          [-mount, mount].forEach(lx => {
+            const strut = new THREE.Mesh(strutGeometry, carbonMat);
+            strut.position.set(lx, ly, -0.012);
             droneBody.add(strut);
           });
-          // Горизонтальная лыжа
-          const skid = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.18, 10), carbonMat);
-          skid.rotation.y = Math.PI / 2;
-          skid.position.set(0, ly, -0.08);
+          const skid = new THREE.Mesh(skidGeometry, carbonMat);
+          skid.position.set(0, ly, -0.047);
           droneBody.add(skid);
         });
       }
@@ -2867,25 +2852,25 @@
       } else {
         // --- УЧЕБНАЯ НАГРУЗКА БПЛА-2: СВЕТОВОЙ ИНДИКАТОР ---
         const payloadHousing = new THREE.Mesh(
-          new THREE.BoxGeometry(0.08, 0.06, 0.025),
+          new THREE.BoxGeometry(0.08, 0.06, 0.022),
           new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.35, metalness: 0.25 })
         );
-        payloadHousing.position.set(0, 0, -0.025);
+        payloadHousing.position.set(0, 0, -0.020);
         droneBody.add(payloadHousing);
 
         // Центральный мощный светодиод по ТЗ
         const lamp = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.026, 0.026, 0.012, 16),
+          new THREE.CylinderGeometry(0.026, 0.026, 0.010, 8),
           new THREE.MeshBasicMaterial({ color: 0x334155 })
         );
         lamp.rotation.x = Math.PI / 2;
-        lamp.position.set(0, 0, -0.055);
+        lamp.position.set(0, 0, -0.035);
         droneBody.add(lamp);
         payloadLamp = lamp;
 
         // Световой конус индикатора операции
         payloadSpot = new THREE.SpotLight(0x22c55e, 0, 4.5, Math.PI / 7, 0.25, 1.0);
-        payloadSpot.position.set(0, 0, -0.06);
+        payloadSpot.position.set(0, 0, -0.041);
         payloadSpot.target.position.set(0, 0, -1);
         droneBody.add(payloadSpot);
         droneBody.add(payloadSpot.target);

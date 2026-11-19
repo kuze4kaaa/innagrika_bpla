@@ -16,8 +16,16 @@ def main() -> None:
     plan = MissionPlanner().plan(mission_map)
     print("Карта прошла проверку")
     print(f"Метод: {plan.method}")
+    print("Таблица расстояний по безопасным переходам, м:")
+    labels = plan.distance_table_points
+    width = max(8, *(len(label) + 1 for label in labels))
+    print(" " * width + "".join(f"{label:>{width}}" for label in labels))
+    for label, row in zip(labels, plan.distance_table_m):
+        print(f"{label:>{width}}" + "".join(f"{length:{width}.2f}" for length in row))
     print(f"Порядок целей: {', '.join(plan.target_ids) or 'нет допустимых целей'}")
     print(f"Длина маршрута с возвратом: {plan.route_length_m:.2f} м")
+    if plan.nearest_route_length_m is not None:
+        print(f"Маршрут по ближайшей цели (все достижимые цели): {plan.nearest_route_length_m:.2f} м")
     print(f"Расчётное время с резервом: {plan.estimated_total_seconds:.1f} с")
     if plan.skipped:
         print("Пропуски:")

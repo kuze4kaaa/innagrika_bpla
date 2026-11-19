@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 import heapq
-import itertools
 import math
 from typing import Iterable, Sequence
 
@@ -30,6 +29,9 @@ class MissionPlan:
     route_length_m: float
     estimated_total_seconds: float
     skipped: tuple[tuple[str, str], ...]
+    distance_table_points: tuple[str, ...] = ()
+    distance_table_m: tuple[tuple[float, ...], ...] = ()
+    nearest_route_length_m: float | None = None
 
     @property
     def target_ids(self) -> tuple[str, ...]:
@@ -38,6 +40,45 @@ class MissionPlan:
 
 class NoSafePathError(ValueError):
     pass
+
+
+class _HeldKarp:
+    def __init__(self, distances: Sequence[Sequence[float]]) -> None:
+        self.distances = distances
+        self.target_count = len(distances) - 1
+
+        @lru_cache(maxsize=None)
+        def best_to(mask: int, last: int) -> tuple[float, int]:
+            remaining = mask ^ (1 << (last - 1))
+            if not remaining:
+                return distances[0][last], 0
+            return min(
+                (best_to(remaining, previous)[0] + distances[previous][last], previous)
+                for previous in _HeldKarp.indices(remaining)
+            )
+
+        self.best_to = best_to
+
+    @staticmethod
+    def indices(mask: int) -> Iterable[int]:
+        while mask:
+            bit = mask & -mask
+            yield bit.bit_length()
+            mask ^= bit
+
+    def best_tour(self, mask: int) -> tuple[float, int]:
+        if not mask:
+            return 0.0, 0
+        return min((self.best_to(mask, last)[0] + self.distances[last][0], last) for last in self.indices(mask))
+
+    def order(self, mask: int, last: int) -> tuple[int, ...]:
+        backward = []
+        while last:
+            backward.append(last)
+            _, previous = self.best_to(mask, last)
+            mask ^= 1 << (last - 1)
+            last = previous
+        return tuple(reversed(backward))
 
 
 class MissionPlanner:
@@ -68,18 +109,22 @@ class MissionPlanner:
         polygons = tuple(zone.vertices for zone in mission_map.forbidden_zones)
         unreachable: list[tuple[str, str]] = []
         reachable: list[Target] = []
+        home_paths = []
 
         for target in targets:
             point = (target.x, target.y)
             if any(clearance_to_polygon(point, polygon) < self.clearance_m for polygon in polygons):
                 unreachable.append((target.target_id, "цель попала в расширенную запретную зону"))
+            elif not self._within_field(point, mission_map):
+                unreachable.append((target.target_id, "цель вне границ поля с безопасным отступом"))
             else:
                 try:
-                    self._shortest_path(home, point, mission_map)
+                    path = self._shortest_path(home, point, mission_map)
                 except NoSafePathError:
                     unreachable.append((target.target_id, "нет безопасного пути с возвратом"))
                 else:
                     reachable.append(target)
+                    home_paths.append(path)
 
         if not reachable:
             return MissionPlan(
@@ -89,39 +134,39 @@ class MissionPlanner:
                 route_length_m=0.0,
                 estimated_total_seconds=self.takeoff_landing_seconds + self.reserve_seconds,
                 skipped=tuple(unreachable),
+                distance_table_points=("Home-2",),
+                distance_table_m=((0.0,),),
             )
 
-        nearest_order = self._nearest_neighbor_order(reachable, home, mission_map)
-        nearest_length = self._order_length(nearest_order, home, mission_map)
-
-        if len(reachable) <= 8:
-            exact_order = self._exact_order(reachable, home, mission_map)
-            exact_length = self._order_length(exact_order, home, mission_map)
-        else:
-            exact_order = nearest_order
-            exact_length = nearest_length
-
-        full_order = exact_order if exact_length <= nearest_length else nearest_order
-        full_method = "точный перебор" if full_order == exact_order and len(reachable) <= 8 else "ближайшая цель"
-        full_duration = self._estimate_duration(
-            self._order_length(full_order, home, mission_map), len(full_order)
+        if len(reachable) > 16:
+            raise ValueError("Точный расчёт Хелда-Карпа ограничен 16 достижимыми целями")
+        points = [home, *((target.x, target.y) for target in reachable)]
+        paths, distances = self._distance_table(points, home_paths, mission_map)
+        solver = _HeldKarp(distances)
+        full_mask = (1 << len(reachable)) - 1
+        mask = full_mask
+        length, last = solver.best_tour(mask)
+        method = "Хелд-Карп; сравнение с методом ближайшей цели выполнено"
+        if self._estimate_duration(length, len(reachable)) > self.execution_limit_seconds:
+            mask, length, last = self._best_feasible_subset(reachable, solver, full_mask)
+            method = "Хелд-Карп; выполнимое подмножество по приоритету и числу целей"
+        skipped = unreachable + [
+            (target.target_id, "не помещается во время с возвратом и резервом")
+            for bit, target in enumerate(reachable) if not mask & (1 << bit)
+        ]
+        order = solver.order(mask, last)
+        legs = tuple(PlannedTarget(reachable[to - 1], paths[start][to]) for start, to in zip((0, *order), order))
+        return MissionPlan(
+            method=method,
+            targets=legs,
+            return_path=paths[order[-1]][0] if order else (home,),
+            route_length_m=length,
+            estimated_total_seconds=self._estimate_duration(length, len(order)),
+            skipped=tuple(skipped),
+            distance_table_points=("Home-2", *(target.target_id for target in reachable)),
+            distance_table_m=tuple(map(tuple, distances)),
+            nearest_route_length_m=self._nearest_neighbor_length(distances),
         )
-
-        if full_duration <= self.execution_limit_seconds:
-            selected = full_order
-            skipped = unreachable
-            method = f"{full_method}; сравнение с методом ближайшей цели выполнено"
-        else:
-            selected = self._best_feasible_subset(reachable, home, mission_map)
-            selected_ids = {target.target_id for target in selected}
-            skipped = unreachable + [
-                (target.target_id, "не помещается во время с возвратом и резервом")
-                for target in reachable
-                if target.target_id not in selected_ids
-            ]
-            method = "выполнимое подмножество по приоритету и числу целей"
-
-        return self._build_plan(selected, home, mission_map, method, skipped)
 
     def _estimate_duration(self, route_length: float, target_count: int) -> float:
         return (
@@ -131,96 +176,65 @@ class MissionPlanner:
             + self.reserve_seconds
         )
 
-    def _nearest_neighbor_order(
-        self, targets: Sequence[Target], home: Point, mission_map: MissionMap
-    ) -> tuple[Target, ...]:
-        remaining = list(targets)
-        current = home
-        result: list[Target] = []
+    @staticmethod
+    def _nearest_neighbor_length(distances: Sequence[Sequence[float]]) -> float:
+        remaining = set(range(1, len(distances)))
+        current = 0
+        length = 0.0
         while remaining:
-            target = min(
-                remaining,
-                key=lambda item: self._path_length(
-                    self._shortest_path(current, (item.x, item.y), mission_map),
-                    start=current,
-                ),
-            )
+            target = min(remaining, key=lambda index: (distances[current][index], index))
+            length += distances[current][target]
             remaining.remove(target)
-            result.append(target)
-            current = (target.x, target.y)
-        return tuple(result)
-
-    def _exact_order(
-        self, targets: Sequence[Target], home: Point, mission_map: MissionMap
-    ) -> tuple[Target, ...]:
-        best_order: tuple[Target, ...] | None = None
-        best_length = math.inf
-        for order in itertools.permutations(targets):
-            length = self._order_length(order, home, mission_map)
-            if length < best_length:
-                best_length = length
-                best_order = order
-        if best_order is None:
-            raise NoSafePathError("Не найден порядок целей")
-        return best_order
+            current = target
+        return length + distances[current][0]
 
     def _best_feasible_subset(
-        self, targets: Sequence[Target], home: Point, mission_map: MissionMap
-    ) -> tuple[Target, ...]:
-        best_order: tuple[Target, ...] = ()
+        self, targets: Sequence[Target], solver: _HeldKarp, full_mask: int
+    ) -> tuple[int, float, int]:
+        best = (0, 0.0, 0)
         best_score = (-1, -1, -math.inf)
-        for count in range(1, len(targets) + 1):
-            for subset in itertools.combinations(targets, count):
-                order = self._exact_order(subset, home, mission_map) if count <= 8 else self._nearest_neighbor_order(subset, home, mission_map)
-                length = self._order_length(order, home, mission_map)
-                duration = self._estimate_duration(length, len(order))
-                if duration > self.execution_limit_seconds:
-                    continue
-                score = (sum(target.priority for target in order), len(order), -duration)
-                if score > best_score:
-                    best_score = score
-                    best_order = order
-        return best_order
+        for mask in range(1, full_mask):
+            count = mask.bit_count()
+            length, last = solver.best_tour(mask)
+            duration = self._estimate_duration(length, count)
+            if duration > self.execution_limit_seconds:
+                continue
+            priority = sum(targets[index - 1].priority for index in solver.indices(mask))
+            score = (priority, count, -duration)
+            if score > best_score:
+                best_score = score
+                best = (mask, length, last)
+        return best
 
-    def _order_length(
-        self, order: Sequence[Target], home: Point, mission_map: MissionMap
-    ) -> float:
-        current = home
-        total = 0.0
-        for target in order:
-            path = self._shortest_path(current, (target.x, target.y), mission_map)
-            total += self._path_length(path, start=current)
-            current = (target.x, target.y)
-        return_path = self._shortest_path(current, home, mission_map)
-        total += self._path_length(return_path, start=current)
-        return total
+    def _distance_table(
+        self, points: Sequence[Point], home_paths: Sequence[tuple[Point, ...]], mission_map: MissionMap
+    ) -> tuple[list[list[tuple[Point, ...]]], list[list[float]]]:
+        size = len(points)
+        paths: list[list[tuple[Point, ...]]] = [[() for _ in points] for _ in points]
+        distances = [[0.0] * size for _ in points]
+        for start in range(size):
+            for end in range(start + 1, size):
+                if start == 0:
+                    path = home_paths[end - 1]
+                else:
+                    # Если сетка не соединяет две цели напрямую, остаётся проверенный путь через базу.
+                    through_home = paths[start][0] + paths[0][end]
+                    try:
+                        path = self._shortest_path(points[start], points[end], mission_map)
+                    except NoSafePathError:
+                        path = through_home
+                    else:
+                        if self._path_length(through_home, points[start]) < self._path_length(path, points[start]):
+                            path = through_home
+                paths[start][end] = path
+                paths[end][start] = (points[start], *path[:-1])[::-1]
+                distances[start][end] = distances[end][start] = self._path_length(path, points[start])
+        return paths, distances
 
-    def _build_plan(
-        self,
-        order: Sequence[Target],
-        home: Point,
-        mission_map: MissionMap,
-        method: str,
-        skipped: Iterable[tuple[str, str]],
-    ) -> MissionPlan:
-        current = home
-        planned: list[PlannedTarget] = []
-        total = 0.0
-        for target in order:
-            path = self._shortest_path(current, (target.x, target.y), mission_map)
-            total += self._path_length(path, start=current)
-            planned.append(PlannedTarget(target=target, path_to_target=path))
-            current = (target.x, target.y)
-        return_path = self._shortest_path(current, home, mission_map)
-        total += self._path_length(return_path, start=current)
-        return MissionPlan(
-            method=method,
-            targets=tuple(planned),
-            return_path=return_path,
-            route_length_m=total,
-            estimated_total_seconds=self._estimate_duration(total, len(planned)),
-            skipped=tuple(skipped),
-        )
+    def _within_field(self, point: Point, mission_map: MissionMap) -> bool:
+        x, y = point
+        return (self.clearance_m <= x <= mission_map.field_width - self.clearance_m
+                and self.clearance_m <= y <= mission_map.field_height - self.clearance_m)
 
     @staticmethod
     def _path_length(path: Sequence[Point], start: Point | None = None) -> float:
@@ -231,6 +245,8 @@ class MissionPlanner:
 
     @lru_cache(maxsize=4096)
     def _shortest_path(self, start: Point, end: Point, mission_map: MissionMap) -> tuple[Point, ...]:
+        if not self._within_field(start, mission_map) or not self._within_field(end, mission_map):
+            raise NoSafePathError("Начало или конец перехода вне границ с безопасным отступом")
         polygons = tuple(zone.vertices for zone in mission_map.forbidden_zones)
         if segment_is_safe(start, end, polygons, self.clearance_m):
             return (end,)
@@ -244,7 +260,7 @@ class MissionPlanner:
 
         def allowed(node: tuple[int, int]) -> bool:
             point = point_for(node)
-            if not (0.0 <= point[0] <= mission_map.field_width and 0.0 <= point[1] <= mission_map.field_height):
+            if not self._within_field(point, mission_map):
                 return False
             return all(clearance_to_polygon(point, polygon) >= self.clearance_m for polygon in polygons)
 

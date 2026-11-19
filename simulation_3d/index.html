@@ -1278,7 +1278,7 @@
         return spans;
       }
 
-      function plan({ width, height, clearance, obstacles, home, footprint, cells }) {
+      function createRouter({ width, height, clearance, obstacles }) {
         const bounds = { minX: clearance, maxX: width - clearance, minY: clearance, maxY: height - clearance };
         const expanded = obstacles.map(({ cx, cy, w, h }) => ({
           minX: cx - (w / 2 + clearance), maxX: cx + (w / 2 + clearance),
@@ -1287,13 +1287,18 @@
         const inside = (p, box) => box.minX < p.x && p.x < box.maxX && box.minY < p.y && p.y < box.maxY;
         const safePoint = p => p.x >= bounds.minX && p.x <= bounds.maxX &&
           p.y >= bounds.minY && p.y <= bounds.maxY && !expanded.some(box => inside(p, box));
-        if (!safePoint(home) || footprint.x <= clearance || footprint.y <= clearance) return null;
-
         const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
         const corners = [bounds, ...expanded].flatMap(box => [box.minX, box.maxX].flatMap(x =>
           [box.minY, box.maxY].map(y => ({
             x: clamp(x, bounds.minX, bounds.maxX), y: clamp(y, bounds.minY, bounds.maxY)
           })))).filter(safePoint);
+        const shortestLeg = (a, b) => safePoint(a) && safePoint(b) ? safeLeg(a, b, expanded, corners) : null;
+        return { bounds, expanded, safePoint, clamp, shortestLeg };
+      }
+
+      function plan({ width, height, clearance, obstacles, home, footprint, cells }) {
+        const { bounds, expanded, safePoint, clamp, shortestLeg } = createRouter({ width, height, clearance, obstacles });
+        if (!safePoint(home) || footprint.x <= clearance || footprint.y <= clearance) return null;
         const path = [{ ...home, kind: 'takeoff' }];
         const pending = new Set(cells);
         const viewBox = p => ({
@@ -1316,7 +1321,7 @@
           if (row % 2) spans.reverse();
           for (const span of spans) {
             const [start, end] = row % 2 ? [span[1], span[0]] : span;
-            const leg = safeLeg(path[path.length - 1], { x: start, y }, expanded, corners);
+            const leg = shortestLeg(path[path.length - 1], { x: start, y });
             if (!leg) continue;
             for (const p of leg) append(p, 'transit');
             append({ x: end, y }, 'survey');
@@ -1335,21 +1340,102 @@
           const from = path[path.length - 1];
           candidates.sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y));
           for (const candidate of candidates) {
-            const leg = safeLeg(from, candidate, expanded, corners);
+            const leg = shortestLeg(from, candidate);
             if (!leg) continue;
             for (const p of leg) append(p, 'fill');
             break;
           }
         }
 
-        const returnLeg = safeLeg(path[path.length - 1], home, expanded, corners);
+        const returnLeg = shortestLeg(path[path.length - 1], home);
         if (!returnLeg) return null;
         for (const p of returnLeg) append(p, 'return');
         path.push({ ...home, kind: 'land' });
         return { path, uncoveredCells: pending.size };
       }
 
-      return { plan, crossesInterior };
+      return { plan, crossesInterior, createRouter };
+    })();
+  </script>
+  <script id="executor-routing">
+    const ExecutorRouting = (() => {
+      function heldKarp(distances) {
+        const count = distances.length - 1;
+        if (count === 0) return { order: [0], length: 0 };
+        if (count > 16) throw new RangeError('Хелд-Карп: не более 16 целей');
+
+        const full = (1 << count) - 1;
+        const cost = new Float64Array((full + 1) * count).fill(Infinity);
+        const parent = new Int8Array(cost.length).fill(-1);
+        const index = (mask, last) => mask * count + last;
+        for (let last = 0; last < count; last++) {
+          cost[index(1 << last, last)] = distances[0][last + 1];
+        }
+        // cost[mask, last]: расстояние от базы через точки mask до last.
+        for (let mask = 1; mask <= full; mask++) {
+          for (let last = 0; last < count; last++) {
+            if (!(mask & (1 << last))) continue;
+            const sourceCost = cost[index(mask, last)];
+            if (!Number.isFinite(sourceCost)) continue;
+            for (let next = 0; next < count; next++) {
+              if (mask & (1 << next)) continue;
+              const nextIndex = index(mask | (1 << next), next);
+              const total = sourceCost + distances[last + 1][next + 1];
+              if (total < cost[nextIndex]) {
+                cost[nextIndex] = total;
+                parent[nextIndex] = last;
+              }
+            }
+          }
+        }
+
+        let last = -1;
+        let length = Infinity;
+        for (let i = 0; i < count; i++) {
+          const total = cost[index(full, i)] + distances[i + 1][0];
+          if (total < length) {
+            length = total;
+            last = i;
+          }
+        }
+        if (!Number.isFinite(length)) return null;
+
+        const backward = [];
+        let mask = full;
+        while (last !== -1) {
+          backward.push(last + 1);
+          const previous = parent[index(mask, last)];
+          mask ^= 1 << last;
+          last = previous;
+        }
+        return { order: [0, ...backward.reverse(), 0], length };
+      }
+
+      function plan(points, shortestLeg) {
+        const distances = points.map(() => new Array(points.length).fill(Infinity));
+        const legs = points.map(() => new Array(points.length).fill(null));
+        for (let i = 0; i < points.length; i++) {
+          distances[i][i] = 0;
+          for (let j = i + 1; j < points.length; j++) {
+            const path = shortestLeg(points[i], points[j]);
+            if (!path) continue;
+            let from = points[i];
+            let length = 0;
+            for (const to of path) {
+              length += Math.hypot(to.x - from.x, to.y - from.y);
+              from = to;
+            }
+            distances[i][j] = distances[j][i] = length;
+            legs[i][j] = path;
+            legs[j][i] = [points[i], ...path.slice(0, -1)].reverse();
+          }
+        }
+        const tour = heldKarp(distances);
+        if (!tour) return null;
+        return { ...tour, distances, routeLegs: tour.order.slice(1).map((to, i) => legs[tour.order[i]][to]) };
+      }
+
+      return { heldKarp, plan };
     })();
   </script>
   <script>
@@ -1367,6 +1453,7 @@
     const DRONE_COLLISION_DIST = 0.35;
     const MAX_PHYSICS_STEP = 0.06;
     const RECON_HOME = { x: 0.40, y: 0.40 };
+    const EXECUTOR_HOME = { x: 0.40, y: 1.20 };
 
     function cameraFootprint(altitude) {
       const scale = altitude / NOMINAL_ALT;
@@ -2838,158 +2925,6 @@
     scene.add(drone1Obj.group);
     scene.add(drone2Obj.group);
 
-    // --- МАРШРУТ ПОЛНОГО ОБСЛЕДОВАНИЯ ПОЛИГОНА БПЛА-РАЗВЕДЧИКОМ (ГАЛСЫ БЕЗ КАСАНИЯ СТЕН) ---
-        // --- СИСТЕМА ДИНАМИЧЕСКОГО ОБХОДА ПРЕПЯТСТВИЙ (VISIBILITY GRAPH + DIJKSTRA) ---
-    function segmentIntersectsNFZ(p1, p2) {
-      for (let i = 0; i < nfzZones.length; i++) {
-        const z = nfzZones[i];
-        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        const steps = Math.max(1, Math.ceil(dist / 0.04));
-        for (let s = 1; s < steps; s++) {
-          const px = p1.x + (p2.x - p1.x) * (s / steps);
-          const py = p1.y + (p2.y - p1.y) * (s / steps);
-          const extra = ROUTE_CLEARANCE - BUFFER_INFLATION;
-          if (px > z.barrierMinX - extra && px < z.barrierMaxX + extra &&
-              py > z.barrierMinY - extra && py < z.barrierMaxY + extra) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    const ASTAR_RES = 0.10;
-    const ASTAR_COLS = Math.round(FIELD_WIDTH / ASTAR_RES);
-    const ASTAR_ROWS = Math.round(FIELD_HEIGHT / ASTAR_RES);
-
-    function getShortestLegDijkstra(pStart, pEnd) {
-      if (!segmentIntersectsNFZ(pStart, pEnd)) {
-        return [pEnd];
-      }
-
-      // BUFFER_INFLATION уже содержит радиус БПЛА, запас и обе ошибки привязки.
-      const clearance = ROUTE_CLEARANCE;
-      const grid = new Uint8Array(ASTAR_COLS * ASTAR_ROWS);
-
-      nfzZones.forEach(z => {
-        const minX = z.cx - z.w / 2 - clearance;
-        const maxX = z.cx + z.w / 2 + clearance;
-        const minY = z.cy - z.h / 2 - clearance;
-        const maxY = z.cy + z.h / 2 + clearance;
-
-        const c0 = Math.max(0, Math.floor(minX / ASTAR_RES));
-        const c1 = Math.min(ASTAR_COLS - 1, Math.floor(maxX / ASTAR_RES));
-        const r0 = Math.max(0, Math.floor(minY / ASTAR_RES));
-        const r1 = Math.min(ASTAR_ROWS - 1, Math.floor(maxY / ASTAR_RES));
-
-        for (let r = r0; r <= r1; r++) {
-          for (let c = c0; c <= c1; c++) {
-            grid[r * ASTAR_COLS + c] = 1;
-          }
-        }
-      });
-
-      const startC = Math.max(0, Math.min(ASTAR_COLS - 1, Math.floor(pStart.x / ASTAR_RES)));
-      const startR = Math.max(0, Math.min(ASTAR_ROWS - 1, Math.floor(pStart.y / ASTAR_RES)));
-      const endC = Math.max(0, Math.min(ASTAR_COLS - 1, Math.floor(pEnd.x / ASTAR_RES)));
-      const endR = Math.max(0, Math.min(ASTAR_ROWS - 1, Math.floor(pEnd.y / ASTAR_RES)));
-
-      grid[startR * ASTAR_COLS + startC] = 0;
-      grid[endR * ASTAR_COLS + endC] = 0;
-
-      const dist = new Float32Array(ASTAR_COLS * ASTAR_ROWS).fill(1e9);
-      const parent = new Int32Array(ASTAR_COLS * ASTAR_ROWS).fill(-1);
-      const closed = new Uint8Array(ASTAR_COLS * ASTAR_ROWS);
-
-      const startIdx = startR * ASTAR_COLS + startC;
-      const endIdx = endR * ASTAR_COLS + endC;
-      dist[startIdx] = 0;
-
-      const heap = [{ f: Math.hypot(endC - startC, endR - startR), idx: startIdx }];
-      const DIRS = [
-        [1, 0, 1.0], [-1, 0, 1.0], [0, 1, 1.0], [0, -1, 1.0],
-        [1, 1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [-1, -1, 1.414]
-      ];
-
-      let found = false;
-      while (heap.length > 0) {
-        let best = 0;
-        for (let i = 1; i < heap.length; i++) {
-          if (heap[i].f < heap[best].f) best = i;
-        }
-        const curr = heap.splice(best, 1)[0];
-        const u = curr.idx;
-
-        if (u === endIdx) {
-          found = true;
-          break;
-        }
-        if (closed[u]) continue;
-        closed[u] = 1;
-
-        const uC = u % ASTAR_COLS;
-        const uR = Math.floor(u / ASTAR_COLS);
-        const uDist = dist[u];
-
-        for (let d = 0; d < 8; d++) {
-          const nc = uC + DIRS[d][0];
-          const nr = uR + DIRS[d][1];
-          if (nc < 0 || nc >= ASTAR_COLS || nr < 0 || nr >= ASTAR_ROWS) continue;
-          const nIdx = nr * ASTAR_COLS + nc;
-          if (closed[nIdx] || grid[nIdx] === 1) continue;
-
-          // Защита от срезания углов на диагоналях
-          if (DIRS[d][0] !== 0 && DIRS[d][1] !== 0) {
-            if (grid[uR * ASTAR_COLS + nc] === 1 || grid[nr * ASTAR_COLS + uC] === 1) continue;
-          }
-
-          const alt = uDist + DIRS[d][2];
-          if (alt < dist[nIdx]) {
-            dist[nIdx] = alt;
-            parent[nIdx] = u;
-            const h = Math.hypot(endC - nc, endR - nr);
-            heap.push({ f: alt + h, idx: nIdx });
-          }
-        }
-      }
-
-      if (!found) {
-        return [];
-      }
-
-      const rawPath = [];
-      let curr = endIdx;
-      while (curr !== -1) {
-        const c = curr % ASTAR_COLS;
-        const r = Math.floor(curr / ASTAR_COLS);
-        rawPath.push({ x: (c + 0.5) * ASTAR_RES, y: (r + 0.5) * ASTAR_RES, z: 1.2 });
-        if (curr === startIdx) break;
-        curr = parent[curr];
-      }
-      rawPath.reverse();
-      // Сохраняем action и targetId. Иначе цель после обхода препятствия
-      // превращалась в обычную путевую точку и светодиод не включался.
-      rawPath[rawPath.length - 1] = { ...pEnd, x: pEnd.x, y: pEnd.y, z: pEnd.z || 1.2 };
-
-      // Сглаживание траектории (прямая видимость с барьерами безопасности):
-      const smoothed = [];
-      let checkPt = pStart;
-      let idx = 0;
-      while (idx < rawPath.length) {
-        let furthest = idx;
-        for (let j = rawPath.length - 1; j > idx; j--) {
-          if (!segmentIntersectsNFZ(checkPt, rawPath[j])) {
-            furthest = j;
-            break;
-          }
-        }
-        smoothed.push(rawPath[furthest]);
-        checkPt = rawPath[furthest];
-        idx = furthest + 1;
-      }
-      return smoothed;
-    }
-
     function generateBoustrophedonReconPath() {
       const cells = [];
       isReachableGrid.forEach((reachable, index) => {
@@ -3047,87 +2982,27 @@
       });
     }
 
-    // --- АВТОМАТИЧЕСКИЙ ПЛАНИРОВЩИК МАРШРУТА ИСПОЛНИТЕЛЯ НА БАЗЕ КАРТЫ РАЗВЕДКИ (GCS) ---
-        function planExecutorMissionFromMemory() {
-      const memory = (drone1State.memory && drone1State.memory.length > 0) ? drone1State.memory : [];
-      const acceptedTargets = [];
-
-      memory.forEach(t => {
-        let insideNFZ = false;
-        nfzZones.forEach(z => {
-          if (t.x >= z.barrierMinX && t.x <= z.barrierMaxX &&
-              t.y >= z.barrierMinY && t.y <= z.barrierMaxY) {
-            insideNFZ = true;
-          }
-        });
-
-        // Строгая валидация GCS:
-        // 1. Отбраковка целей внутри запретных зон NFZ
-        // 2. Отбраковка объектов класса B
-        // 3. Отбраковка неопознанных (U)
-        // 4. Допуск только подтвержденных очагов Класса A
-        if (t.type === 'A' && !insideNFZ && !t.nfz) {
-          acceptedTargets.push(t);
-        }
+    function planExecutorMissionFromMemory() {
+      const targets = drone1State.memory
+        .filter(target => target.type === 'A' && !target.nfz)
+        .sort((a, b) => a.id - b.id);
+      const home = { ...EXECUTOR_HOME, z: NOMINAL_ALT };
+      const targetWaypoints = targets.map(target => ({
+        x: target.x, y: target.y, z: NOMINAL_ALT, action: true, targetId: target.id
+      }));
+      const router = ReconSurvey.createRouter({
+        width: FIELD_WIDTH, height: FIELD_HEIGHT,
+        clearance: ROUTE_CLEARANCE, obstacles: nfzZones
       });
-
-      if (acceptedTargets.length === 0) {
-        drone2State.waypoints = [{ x: 0.40, y: 1.20, z: 1.2 }];
-        updateRouteLine(drone2State.waypoints);
-        return 0;
-      }
-
-      // Построение кратчайшего безопасного перехода с использованием глобального алгоритма Дейкстры:
-      function getShortestLeg(pStart, pEnd) {
-        return getShortestLegDijkstra(pStart, pEnd);
-      }
-
-      // Оптимизация последовательности целей (Nearest-Neighbor TSP):
-      const waypoints = [
-        { x: 0.40, y: 1.20, z: 1.2 } // Взлет с площадки Home-2
-      ];
-
-      let currentPos = { x: 0.40, y: 1.20 };
-      const unvisited = [...acceptedTargets];
-      let plannedTargetCount = 0;
-
-      while (unvisited.length > 0) {
-        let bestIdx = 0;
-        let bestDist = Infinity;
-        for (let i = 0; i < unvisited.length; i++) {
-          const t = unvisited[i];
-          const d = Math.hypot(currentPos.x - t.x, currentPos.y - t.y);
-          if (d < bestDist) {
-            bestDist = d;
-            bestIdx = i;
-          }
-        }
-        const target = unvisited.splice(bestIdx, 1)[0];
-        const targetWp = { x: target.x, y: target.y, z: 1.2, action: true, targetId: target.id };
-        const leg = getShortestLeg(currentPos, targetWp);
-        if (leg.length === 0) {
-          continue;
-        }
-        leg.forEach(pt => waypoints.push(pt));
-        plannedTargetCount++;
-        currentPos = { x: target.x, y: target.y };
-      }
-
-      // Кратчайший безопасный возврат на площадку Home-2:
-      const homeWp = { x: 0.40, y: 1.20, z: 1.2 };
-      const returnLeg = getShortestLeg(currentPos, homeWp);
-      if (returnLeg.length > 0) {
-        returnLeg.forEach(pt => waypoints.push(pt));
-        waypoints.push({ x: 0.40, y: 1.20, z: 0.08 }); // Точная посадка на Home-2
-      } else {
-        // Если безопасного возврата нет, посадка выполняется в текущей разрешённой точке.
-        waypoints.push({ x: currentPos.x, y: currentPos.y, z: 0.08 });
-      }
-
-      drone2State.waypoints = waypoints;
-      updateRouteLine(waypoints);
-
-      return plannedTargetCount;
+      const plan = targets.length ? ExecutorRouting.plan([home, ...targetWaypoints], router.shortestLeg) : null;
+      drone2State.missionPlan = plan;
+      drone2State.waypoints = plan ? [
+        home,
+        ...plan.routeLegs.flat().map(point => ({ z: NOMINAL_ALT, ...point })),
+        { ...EXECUTOR_HOME, z: 0.10 }
+      ] : [];
+      if (activeDroneId === 2) updateRouteLine(drone2State.waypoints);
+      return plan;
     }
 
     const drone1State = {
@@ -3140,7 +3015,6 @@
       autoPilot: false,
       waypoints: [],
       autoIdx: 0,
-      waypointStuckTimer: 0,
       memory: []
     };
 
@@ -3157,9 +3031,9 @@
       activePayloadTarget: null,
       actionDone: false,
       stabilizeTimer: 0,
+      missionPlan: null,
       waypoints: [],
-      autoIdx: 0,
-      waypointStuckTimer: 0
+      autoIdx: 0
     };
 
     // Первичная рандомизация карты целей и генерация маршрута
@@ -3508,8 +3382,13 @@
       if (speed > 0.05) {
         return { allowed: false, reason: `скорость ${speed.toFixed(2)} м/с выше допуска стабилизации` };
       }
+      const waypoint = drone2State.waypoints[drone2State.autoIdx];
+      if (drone2State.autoPilot && !waypoint?.action) {
+        return { allowed: false, reason: 'текущая точка маршрута не требует включения' };
+      }
       const candidates = targetMeshes
-        .filter(tm => tm.data.discovered && tm.data.type === 'A' && !tm.data.treated)
+        .filter(tm => tm.data.discovered && tm.data.type === 'A' && !tm.data.treated &&
+          (!drone2State.autoPilot || tm.data.id === waypoint.targetId))
         .map(tm => ({ tm, dist: Math.hypot(drone2State.x - tm.data.x, drone2State.y - tm.data.y) }))
         .sort((a, b) => a.dist - b.dist);
       if (candidates.length === 0 || candidates[0].dist > 0.06) {
@@ -3685,7 +3564,7 @@
       if (dt > MAX_PHYSICS_STEP) dt = MAX_PHYSICS_STEP;
 
       let localAx = 0, localAy = 0, yawRate = 0;
-      let reconStep = null;
+      let routeStep = null;
 
       // 1. Непрерывное сканирование поля сенсором камеры и закрашивание 2D SLAM-карты
       if (st.role === 'recon' && (st.autoPilot || st.z > 0.15)) {
@@ -3751,8 +3630,8 @@
               updateHUDDiscoveredCount(st.memory.length);
               showDiscoveryToast(t);
 
-              // В реальном времени обновляем идеальный маршрут Исполнителя на основе открытых точек!
-              planExecutorMissionFromMemory();
+              // Маршрут пересчитывается при новом разрешённом наблюдении до вылета исполнителя.
+              if (chainStage < 2 && t.type === 'A') planExecutorMissionFromMemory();
             }
           }
         });
@@ -3812,83 +3691,34 @@
           if (keys['space'] || keys['q']) st.targetZ += 0.7 * dt;
           if (keys['shiftleft'] || keys['shiftright'] || keys['e']) st.targetZ -= 0.7 * dt;
         }
-      } else if (st.autoPilot && st.role === 'recon' && st.waypoints[st.autoIdx].kind !== 'land') {
-        const { x, y, z, kind } = st.waypoints[st.autoIdx];
-        st.targetZ = z;
-        const dx = x - st.x;
-        const dy = y - st.y;
-        const distance = Math.hypot(dx, dy);
-        const step = MAX_SPEED * dt;
-        reconStep = { x: st.x, y: st.y };
-        if (st.z >= ALT_MIN && dt > 0) {
-          if (distance <= step) {
-            reconStep = { x, y };
-            st.autoIdx++;
-          } else {
-            reconStep = { x: st.x + dx * step / distance, y: st.y + dy * step / distance };
-          }
-          if (distance > 0) {
-            const heading = Math.atan2(dy, dx) - st.yaw;
-            st.yaw += Math.atan2(Math.sin(heading), Math.cos(heading)) * 4 * dt;
-          }
-        }
-        st.fsm = `${kind === 'survey' || kind === 'fill' ? 'RECON_SCAN' : 'RECON_NAV'}_${st.autoIdx}/${st.waypoints.length}`;
       } else if (st.autoPilot) {
         const wp = st.waypoints[st.autoIdx];
-        const isFinalLandingWp = (st.autoIdx === st.waypoints.length - 1);
+        const isFinalLandingWp = st.autoIdx === st.waypoints.length - 1;
         const dx = wp.x - st.x;
         const dy = wp.y - st.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distance = Math.hypot(dx, dy);
 
-        let acceptDist = 0.12; // Точное прохождение опорных точек без срезания углов
-        if (wp.action) acceptDist = 0.06; // Допуск по ТЗ AT11-2: delta r <= 0.06 м
-        if (isFinalLandingWp) acceptDist = 0.03; // Точный захват центра площадки
-
-        if (dist > acceptDist) {
-          // Таймер застревания увеличивается только если БПЛА действительно заблокирован препятствием или не двигается
-          const spd = Math.sqrt(st.vx * st.vx + st.vy * st.vy);
-          if (spd < 0.04) {
-            st.waypointStuckTimer += dt;
-          } else {
-            st.waypointStuckTimer = Math.max(0, st.waypointStuckTimer - dt * 0.5);
-          }
-
-          const targetYaw = Math.atan2(dy, dx);
-          let diffYaw = targetYaw - st.yaw;
-          while (diffYaw > Math.PI) diffYaw -= 2 * Math.PI;
-          while (diffYaw < -Math.PI) diffYaw += 2 * Math.PI;
-          st.yaw += diffYaw * 4.0 * dt;
-
-          const cosH = Math.cos(st.yaw);
-          const sinH = Math.sin(st.yaw);
-          const baseSpeed = (wp.action || isFinalLandingWp) ? 0.75 : 1.1;
-          const speedFactor = dist > 0.35 ? Math.min(1.8, dist * 1.5) : baseSpeed;
-          localAx = (dx * cosH + dy * sinH) / dist * speedFactor;
-          localAy = (-dx * sinH + dy * cosH) / dist * speedFactor;
-
+        if (!isFinalLandingWp && (!wp.action || distance > 0 || st.z < ALT_MIN)) {
+          const step = MAX_SPEED * dt;
           st.targetZ = wp.z;
-          st.fsm = `NAV_WP_${st.autoIdx + 1}/${st.waypoints.length}`;
-
-          // При застревании маршрут перестраивается. Точка молча не пропускается.
-          if (st.waypointStuckTimer > 15.0) {
-            const replanned = getShortestLegDijkstra(
-              { x: st.x, y: st.y, z: st.z },
-              wp
-            );
-            st.waypointStuckTimer = 0;
-            if (replanned.length > 0) {
-              st.waypoints.splice(st.autoIdx, 1, ...replanned);
+          routeStep = { x: st.x, y: st.y };
+          if (st.z >= ALT_MIN && dt > 0) {
+            if (distance <= step) {
+              routeStep = { x: wp.x, y: wp.y };
+              if (!wp.action) st.autoIdx++;
             } else {
-              st.autoPilot = false;
-              chainRunning = false;
-              st.fsm = 'SAFE_STOP_NO_ROUTE';
-              if (st.payloadActive) stopPayload('безопасный маршрут не найден', true);
-              showPhaseBanner('БЕЗОПАСНАЯ ОСТАНОВКА: маршрут к следующей точке не найден.');
+              routeStep = { x: st.x + dx * step / distance, y: st.y + dy * step / distance };
+            }
+            if (distance > 0) {
+              const heading = Math.atan2(dy, dx) - st.yaw;
+              st.yaw += Math.atan2(Math.sin(heading), Math.cos(heading)) * 4 * dt;
             }
           }
+          const phase = st.role === 'executor' ? 'EXEC_NAV' :
+            (wp.kind === 'survey' || wp.kind === 'fill' ? 'RECON_SCAN' : 'RECON_NAV');
+          st.fsm = `${phase}_${st.autoIdx + 1}/${st.waypoints.length}`;
         } else {
-          st.waypointStuckTimer = 0;
-          if (wp.action && st.role === 'executor') {
+          if (wp.action) {
             // Зависание и точная стабилизация над очагом A:
             st.vx = 0; st.vy = 0;
             if (st.stabilizeTimer < 1.0) {
@@ -3933,8 +3763,15 @@
                 chainStage = 2;
                 updatePipelineStep(2);
                 obj.cameraFrustum.visible = false;
-                const acceptedCount = planExecutorMissionFromMemory();
-                showPhaseBanner(`ЭТАП 2 (GCS): Покрытие 100% вне препятствий, обнаружено целей: ${drone1State.memory.length}. Принято ${acceptedCount} очагов A.`);
+                const plan = planExecutorMissionFromMemory();
+                if (!plan) {
+                  chainRunning = false;
+                  document.getElementById('btnRunChain').textContent = 'Повторить разведку';
+                  showPhaseBanner('Исполнитель не запущен: нет безопасного маршрута по всем разрешённым целям с возвратом.');
+                  return;
+                }
+                const acceptedCount = plan.order.length - 2;
+                showPhaseBanner(`ЭТАП 2 (GCS): Хелд-Карп. Маршрут с возвратом: ${plan.length.toFixed(2)} м, целей A: ${acceptedCount}. Покрытие разведки: 100%.`);
                 const revision = currentMapRevision;
                 const startExecutor = () => {
                   if (!chainRunning || chainStage !== 2 || currentMapRevision !== revision) return;
@@ -4019,10 +3856,10 @@
       let nextX = st.x + st.vx * dt;
       let nextY = st.y + st.vy * dt;
 
-      if (reconStep && dt > 0) {
-        // Разведчик следует по отрезкам точно: инерция не срезает углы обхода.
-        nextX = reconStep.x;
-        nextY = reconStep.y;
+      if (routeStep && dt > 0) {
+        // Автопилот проходит каждую точку обхода без срезания углов.
+        nextX = routeStep.x;
+        nextY = routeStep.y;
         st.vx = (nextX - st.x) / dt;
         st.vy = (nextY - st.y) / dt;
       }
@@ -4410,6 +4247,7 @@
         document.documentElement.dataset.smokeCoverage = String(slamCoverage);
         document.documentElement.dataset.smokeReconState = `${drone1State.fsm}:${drone1State.autoIdx}/${drone1State.waypoints.length}:${drone1State.x.toFixed(2)},${drone1State.y.toFixed(2)},${drone1State.z.toFixed(2)}`;
         document.documentElement.dataset.smokePlannedIds = [...new Set(drone2State.waypoints.filter(wp => wp.targetId).map(wp => wp.targetId))].join(',');
+        document.documentElement.dataset.smokeRouteLength = String(drone2State.missionPlan?.length ?? '');
         document.documentElement.dataset.smokeTreatedIds = targetsData.filter(t => t.type === 'A' && t.treated).map(t => t.id).join(',');
         document.documentElement.dataset.smokeTargets = targetsData.map(t => `${t.id}:${t.type}:${t.x.toFixed(2)},${t.y.toFixed(2)}:${t.discovered ? 1 : 0}`).join('|');
         document.documentElement.dataset.smokeEvents = operationLog.map(item => `${item.event}:${item.target_id || ''}:${item.reason || ''}`).join('|');

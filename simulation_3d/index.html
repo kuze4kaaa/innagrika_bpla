@@ -1203,6 +1203,7 @@
     <button class="btn btn-icon" id="btnHelp" title="Подсказка управления">⌨️</button>
   </div>
 
+  <script src="recon_survey.js"></script>
   <script>
     const FIELD_WIDTH = 6.0;
     const FIELD_HEIGHT = 4.0;
@@ -1216,6 +1217,13 @@
     const ROUTE_CLEARANCE = 0.25;
     const DRONE_RADIUS = 0.10;
     const DRONE_COLLISION_DIST = 0.35;
+    const MAX_PHYSICS_STEP = 0.06;
+    const RECON_HOME = { x: 0.40, y: 0.40 };
+
+    function cameraFootprint(altitude) {
+      const scale = altitude / NOMINAL_ALT;
+      return { x: 0.90 * scale, y: 0.65 * scale };
+    }
 
     let simSpeed = 1.0;
     let chainRunning = false;
@@ -1941,9 +1949,7 @@
     function updateSlamScan(px, py, pz) {
       if (pz < 0.15) return;
       // Реальная зона обзора камеры: полуразмеры проекции конуса на земле (угол FOV ~80°)
-      const hRel = Math.max(pz, 0.10);
-      const w = 0.90 * (hRel / 1.2); // Полуширина конуса по X
-      const d = 0.65 * (hRel / 1.2); // Полувысота конуса по Y
+      const { x: w, y: d } = cameraFootprint(pz);
       let newlyScanned = false;
 
       for (let c = 0; c < SLAM_COLS; c++) {
@@ -2399,17 +2405,10 @@
         });
       });
 
-      if (typeof drone1State !== 'undefined') drone1State.memory = [];
+      drone1State.memory = [];
       updateHUDDiscoveredCount(0);
 
-      // Автоматическое обновление галсов под новую карту
-      if (typeof generateBoustrophedonReconPath === 'function') {
-        plannedReconWaypoints = generateBoustrophedonReconPath();
-        if (typeof drone1State !== 'undefined') {
-          drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
-          if (typeof activeDroneId !== 'undefined' && activeDroneId === 1 && typeof routeVisible !== 'undefined' && routeVisible && typeof updateRouteLine === 'function') updateRouteLine(drone1State.waypoints);
-        }
-      }
+      drone1State.waypoints = generateBoustrophedonReconPath();
     }
 
     // --- МОДЕЛИРОВАНИЕ ДВУХ БПЛА ---
@@ -2843,57 +2842,24 @@
       return smoothed;
     }
 
-    // --- ГЕНЕРАТОР ПАРАЛЛЕЛЬНЫХ ГАЛСОВ РАЗВЕДЧИКА С ОНЛАЙН-ОБХОДОМ НЕИЗВЕСТНЫХ ПРЕПЯТСТВИЙ ---
-    // Дрон изначально летит по чистым параллельным прямым (Lawnmower Swaths) без знания о препятствиях,
-    // а при физическом обнаружении стены на траектории — динамически обходит её по контуру!
     function generateBoustrophedonReconPath() {
-      // Чистые параллельные галсы (полное неведение БПЛА о расположении NFZ):
-      const blindSwaths = [
-        { x: 0.40, y: 0.40, z: 1.2 }, // Взлет с Home-1
-        // Галс 1 (Южная полоса, движение на Восток):
-        { x: 0.60, y: 0.45, z: 1.2 },
-        { x: 5.48, y: 0.45, z: 1.2 },
-        // Разворот на полосу 2:
-        { x: 5.48, y: 1.25, z: 1.2 },
-        // Галс 2 (движение на Запад):
-        { x: 0.60, y: 1.25, z: 1.2 },
-        // Разворот на полосу 3:
-        { x: 0.60, y: 2.05, z: 1.2 },
-        // Галс 3 (движение на Восток):
-        { x: 5.48, y: 2.05, z: 1.2 },
-        // Разворот на полосу 4:
-        { x: 5.48, y: 2.85, z: 1.2 },
-        // Галс 4 (движение на Запад):
-        { x: 0.60, y: 2.85, z: 1.2 },
-        // Разворот на полосу 5:
-        { x: 0.60, y: 3.55, z: 1.2 },
-        // Галс 5 (Северная полоса, движение на Восток):
-        { x: 5.48, y: 3.55, z: 1.2 },
-        // Возврат на базу:
-        { x: 0.40, y: 3.55, z: 1.2 },
-        { x: 0.40, y: 0.40, z: 1.2 },
-        { x: 0.40, y: 0.40, z: 0.08 }
-      ];
-
-      // Реактивная трансляция: если прямая между параллельными галсами упирается в стену,
-      // вставляются точки обхода препятствия по безопасному внешнему контуру:
-      const fullPath = [blindSwaths[0]];
-      for (let i = 0; i < blindSwaths.length - 1; i++) {
-        const pStart = fullPath[fullPath.length - 1];
-        const pEnd = blindSwaths[i + 1];
-        const leg = getShortestLegDijkstra(pStart, pEnd);
-        if (leg.length === 0) {
-          // Безопаснее завершить разведку на месте, чем пересечь запретную зону.
-          fullPath.push({ x: pStart.x, y: pStart.y, z: 0.08 });
-          return fullPath;
-        }
-        for (const pt of leg) {
-          fullPath.push(pt);
-        }
-      }
-      return fullPath;
+      const cells = [];
+      isReachableGrid.forEach((reachable, index) => {
+        if (reachable) cells.push({
+          x: (index % SLAM_COLS + 0.5) * SLAM_RES,
+          y: (Math.floor(index / SLAM_COLS) + 0.5) * SLAM_RES
+        });
+      });
+      const footprint = cameraFootprint(ALT_MIN);
+      // Запас на расстояние между двумя кадрами при максимальном шаге физики.
+      const frameGap = MAX_SPEED * MAX_PHYSICS_STEP;
+      const plan = ReconSurvey.plan({
+        width: FIELD_WIDTH, height: FIELD_HEIGHT, clearance: ROUTE_CLEARANCE,
+        obstacles: nfzZones, home: RECON_HOME, cells,
+        footprint: { x: footprint.x - frameGap, y: footprint.y - frameGap }
+      });
+      return plan ? plan.path.map(p => ({ ...p, z: p.kind === 'land' ? 0.08 : NOMINAL_ALT })) : [];
     }
-    let plannedReconWaypoints = generateBoustrophedonReconPath();
 
     let routeLine = null;
     let routeNodes = [];
@@ -3024,7 +2990,7 @@
       targetZ: 0.08,
       fsm: 'READY (HOME-1)',
       autoPilot: false,
-      waypoints: plannedReconWaypoints,
+      waypoints: [],
       autoIdx: 0,
       waypointStuckTimer: 0,
       memory: []
@@ -3309,11 +3275,17 @@
     }
 
     document.getElementById('btnTakeoff').onclick = () => {
+      if (chainRunning) return;
       activeDrone.autoPilot = false;
       activeDrone.targetZ = NOMINAL_ALT;
       activeDrone.fsm = 'TAKEOFF';
     };
     document.getElementById('btnLand').onclick = () => {
+      if (chainRunning && (activeDrone.autoPilot || chainStage === 2)) {
+        chainRunning = false;
+        document.getElementById('btnRunChain').textContent = '⚡ Запуск цепочки ТЗ';
+        showPhaseBanner('Миссия прервана оператором.');
+      }
       activeDrone.autoPilot = false;
       activeDrone.targetZ = 0.08;
       activeDrone.fsm = 'LANDING';
@@ -3356,8 +3328,6 @@
       drone2State.stabilizeTimer = 0;
 
       generateRandomTargets();
-      plannedReconWaypoints = generateBoustrophedonReconPath();
-      drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
       planExecutorMissionFromMemory();
       if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
 
@@ -3368,9 +3338,11 @@
     };
 
     document.getElementById('btnRandomize').onclick = () => {
+      if (chainRunning || drone1State.z >= 0.15 || drone2State.z >= 0.15) {
+        showPhaseBanner('Новую карту можно создать после посадки обоих дронов.');
+        return;
+      }
       generateRandomTargets();
-      plannedReconWaypoints = generateBoustrophedonReconPath();
-      drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
       planExecutorMissionFromMemory();
       if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
       showDiscoveryToast({
@@ -3460,10 +3432,21 @@
 // (chainRunning & chainStage hoisted to top)
 
     document.getElementById('btnRunChain').onclick = () => {
+      if (chainRunning) return;
+      if (drone1State.z >= 0.15 || drone2State.z >= 0.15 ||
+          drone1State.targetZ >= 0.15 || drone2State.targetZ >= 0.15 ||
+          Math.hypot(drone1State.x - RECON_HOME.x, drone1State.y - RECON_HOME.y) > 0.001 ||
+          Math.hypot(drone2State.x - 0.40, drone2State.y - 1.20) > 0.001) {
+        showPhaseBanner('Для запуска разведки верните оба дрона на стартовые площадки или нажмите «Сброс».');
+        return;
+      }
       // При каждом запуске полной цепочки создаем новую случайную расстановку целей!
       generateRandomTargets();
-      plannedReconWaypoints = generateBoustrophedonReconPath();
-      drone1State.waypoints = plannedReconWaypoints.map(wp => ({ ...wp }));
+      if (drone1State.waypoints.length === 0) {
+        updateRouteLine([]);
+        showPhaseBanner('Разведка не запущена: безопасный маршрут с возвратом не найден.');
+        return;
+      }
       drone1State.memory = [];
       drone1State.discoveredCount = 0;
       updateHUDDiscoveredCount(0);
@@ -3551,9 +3534,10 @@
 
     // --- ФИЗИЧЕСКИЙ ДВИЖОК С ПРАВИЛЬНЫМИ ЛОКАЛЬНЫМИ НАКЛОНАМИ ПРИ ЛЮБОМ РЫСКАНИИ ---
     function updateDronePhysics(st, obj, isControlled, dt) {
-      if (dt > 0.06) dt = 0.06;
+      if (dt > MAX_PHYSICS_STEP) dt = MAX_PHYSICS_STEP;
 
       let localAx = 0, localAy = 0, yawRate = 0;
+      let reconStep = null;
 
       // 1. Непрерывное сканирование поля сенсором камеры и закрашивание 2D SLAM-карты
       if (st.role === 'recon' && (st.autoPilot || st.z > 0.15)) {
@@ -3568,9 +3552,7 @@
         targetMeshes.forEach(tm => {
           const t = tm.data;
           if (!t.discovered) {
-            const hRel = Math.max(st.z, 0.10);
-            const w = 0.90 * (hRel / 1.2);
-            const d = 0.65 * (hRel / 1.2);
+            const { x: w, y: d } = cameraFootprint(Math.max(st.z, 0.10));
             const dx = Math.abs(st.x - t.x);
             const dy = Math.abs(st.y - t.y);
 
@@ -3682,6 +3664,27 @@
           if (keys['space'] || keys['q']) st.targetZ += 0.7 * dt;
           if (keys['shiftleft'] || keys['shiftright'] || keys['e']) st.targetZ -= 0.7 * dt;
         }
+      } else if (st.autoPilot && st.role === 'recon' && st.waypoints[st.autoIdx].kind !== 'land') {
+        const { x, y, z, kind } = st.waypoints[st.autoIdx];
+        st.targetZ = z;
+        const dx = x - st.x;
+        const dy = y - st.y;
+        const distance = Math.hypot(dx, dy);
+        const step = MAX_SPEED * dt;
+        reconStep = { x: st.x, y: st.y };
+        if (st.z >= ALT_MIN && dt > 0) {
+          if (distance <= step) {
+            reconStep = { x, y };
+            st.autoIdx++;
+          } else {
+            reconStep = { x: st.x + dx * step / distance, y: st.y + dy * step / distance };
+          }
+          if (distance > 0) {
+            const heading = Math.atan2(dy, dx) - st.yaw;
+            st.yaw += Math.atan2(Math.sin(heading), Math.cos(heading)) * 4 * dt;
+          }
+        }
+        st.fsm = `${kind === 'survey' || kind === 'fill' ? 'RECON_SCAN' : 'RECON_NAV'}_${st.autoIdx}/${st.waypoints.length}`;
       } else if (st.autoPilot) {
         const wp = st.waypoints[st.autoIdx];
         const isFinalLandingWp = (st.autoIdx === st.waypoints.length - 1);
@@ -3772,12 +3775,21 @@
               st.fsm = (st.role === 'recon') ? 'HOME-1 (LANDED)' : 'HOME-2 (LANDED)';
 
               if (chainRunning && chainStage === 1) {
+                if (slamCoverage < 100) {
+                  chainRunning = false;
+                  st.fsm = 'RECON_INCOMPLETE';
+                  document.getElementById('btnRunChain').textContent = 'Повторить разведку';
+                  showPhaseBanner(`Разведка завершена с пропусками: ${slamCoverage.toFixed(1)}% площади вне препятствий. Исполнитель не запущен.`);
+                  return;
+                }
                 chainStage = 2;
                 updatePipelineStep(2);
                 obj.cameraFrustum.visible = false;
                 const acceptedCount = planExecutorMissionFromMemory();
-                showPhaseBanner(`ЭТАП 2 (GCS): Разведка завершена (${drone1State.memory.length}/10 целей). 2 цели в NFZ отклонены, 2 некорректных отклонены. Принято ${acceptedCount} очагов A. Безопасный маршрут готов!`);
+                showPhaseBanner(`ЭТАП 2 (GCS): Покрытие 100% вне препятствий, обнаружено целей: ${drone1State.memory.length}. Принято ${acceptedCount} очагов A.`);
+                const revision = currentMapRevision;
                 const startExecutor = () => {
+                  if (!chainRunning || chainStage !== 2 || currentMapRevision !== revision) return;
                   chainStage = 3;
                   updatePipelineStep(3);
                   setActiveDrone(2);
@@ -3858,6 +3870,14 @@
 
       let nextX = st.x + st.vx * dt;
       let nextY = st.y + st.vy * dt;
+
+      if (reconStep && dt > 0) {
+        // Разведчик следует по отрезкам точно: инерция не срезает углы обхода.
+        nextX = reconStep.x;
+        nextY = reconStep.y;
+        st.vx = (nextX - st.x) / dt;
+        st.vy = (nextY - st.y) / dt;
+      }
 
       // Проверка барьеров NFZ
       let collisionDetected = false;
@@ -4006,10 +4026,8 @@
         // Стабилизированная камера (Gimbal): проекция строго вертикально вниз (Nadir)
         // Конус НЕ наклоняется и НЕ качается при маневрах и наклонах дрона!
         const vApex = [st.x, st.y, Math.max(st.z - 0.026, 0.02)];
-        const hRel = Math.max(st.z, 0.05);
         // Реальный размер проекции камеры (соответствует зоне отрисовки SLAM-карты):
-        const w = 0.90 * (hRel / 1.2);
-        const d = 0.65 * (hRel / 1.2);
+        const { x: w, y: d } = cameraFootprint(Math.max(st.z, 0.05));
 
         const vFL = [st.x + w, st.y + d, 0.005];
         const vFR = [st.x + w, st.y - d, 0.005];
@@ -4237,10 +4255,11 @@
           enforceDroneToDroneCollision();
         }
         const treated = targetsData.filter(t => t.type === 'A' && t.treated).length;
-        document.documentElement.dataset.smokeResult = chainStage === 4 && treated === 6 ? 'passed' : 'failed';
+        document.documentElement.dataset.smokeResult = chainStage === 4 && treated === 6 && slamCoverage === 100 ? 'passed' : 'failed';
         document.documentElement.dataset.smokeStage = String(chainStage);
         document.documentElement.dataset.smokeTreated = String(treated);
         document.documentElement.dataset.smokeMemory = String(drone1State.memory.length);
+        document.documentElement.dataset.smokeCoverage = String(slamCoverage);
         document.documentElement.dataset.smokeReconState = `${drone1State.fsm}:${drone1State.autoIdx}/${drone1State.waypoints.length}:${drone1State.x.toFixed(2)},${drone1State.y.toFixed(2)},${drone1State.z.toFixed(2)}`;
         document.documentElement.dataset.smokePlannedIds = [...new Set(drone2State.waypoints.filter(wp => wp.targetId).map(wp => wp.targetId))].join(',');
         document.documentElement.dataset.smokeTreatedIds = targetsData.filter(t => t.type === 'A' && t.treated).map(t => t.id).join(',');

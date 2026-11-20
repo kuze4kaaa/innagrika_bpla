@@ -61,10 +61,6 @@
       color: #38bdf8;
       letter-spacing: 0.3px;
     }
-    .brand-sub {
-      font-size: 10px;
-      color: #94a3b8;
-    }
 
     .segmented-group {
       background: rgba(15, 23, 42, 0.88);
@@ -337,11 +333,6 @@
       border-color: #38bdf8;
       color: #ffffff;
     }
-    .btn-success {
-      background: #15803d;
-      border-color: #4ade80;
-      color: #ffffff;
-    }
     .btn-active-toggle {
       background: #0369a1;
       border-color: #38bdf8;
@@ -607,9 +598,6 @@
     }
     .scene-legend-card {
       display: none; /* Скрыто по умолчанию */
-      position: absolute;
-      top: 70px;
-      right: 14px;
       width: 280px;
       background: rgba(15, 23, 42, 0.94);
       backdrop-filter: blur(14px);
@@ -630,7 +618,19 @@
       color: #f8fafc;
     }
 
-    /* Компактный верхний бар пайплайна (без нагромождения) */
+    /* Плашки ТЗ над нижней панелью управления */
+    .mission-panels {
+      position: absolute;
+      right: 14px;
+      bottom: 72px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      max-width: calc(100vw - 28px);
+      max-height: max(60px, calc(100dvh - 284px));
+      z-index: 20;
+    }
     .mission-pipeline-card {
       background: rgba(15, 23, 42, 0.88);
       backdrop-filter: blur(12px);
@@ -641,13 +641,16 @@
       flex-direction: column;
       align-items: center;
       gap: 3px;
-      z-index: 12;
+      flex-shrink: 0;
+      max-width: 100%;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       pointer-events: auto;
     }
     .pipeline-steps-row {
       display: flex;
       align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
       gap: 8px;
     }
     .pipe-step {
@@ -679,11 +682,8 @@
     .pipeline-subtext {
       font-size: 10px;
       color: #94a3b8;
-      max-width: 480px;
+      max-width: min(400px, calc(100vw - 54px));
       text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
     /* Убираем отдельный тяжелый mission-phase-banner */
@@ -693,7 +693,7 @@
 
     /* Компактный Bottom Dock */
     
-    /* --- ВЕРХНИЙ БАР (3-КОЛОНОЧНЫЙ FLEX БЕЗ НАЛОЖЕНИЙ) --- */
+    /* Верхняя панель камер, скорости и телеметрии */
     .topbar {
       position: absolute;
       top: 10px;
@@ -712,14 +712,6 @@
       gap: 8px;
       pointer-events: auto;
       flex-shrink: 0;
-    }
-    .topbar-center {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex: 1;
-      min-width: 0;
-      pointer-events: auto;
     }
     .topbar-right {
       display: flex;
@@ -762,20 +754,6 @@
       box-shadow: 0 0 8px rgba(2, 132, 199, 0.6);
     }
 
-    /* Пайплайн этапов по центру (в потоке flex, БЕЗ absolute) */
-    .mission-pipeline-card {
-      background: rgba(15, 23, 42, 0.92);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      border-radius: 20px;
-      padding: 4px 14px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    }
-
     /* --- НИЖНИЙ ДОК: СТРОГО ВЫРОВНЕННЫЕ И ОДИНАКОВЫЕ КНОПКИ --- */
     .hud-controls {
       position: absolute;
@@ -790,6 +768,8 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      max-width: calc(100vw - 24px);
+      overflow-x: auto;
       z-index: 100;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
       white-space: nowrap;
@@ -822,24 +802,26 @@
       padding: 0 10px;
       font-size: 13px;
     }
-
-
-    .mission-pipeline-card {
-      position: absolute;
-      top: 66px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.92);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(56, 189, 248, 0.4);
-      border-radius: 10px;
-      padding: 6px 14px;
+    .field-size-control {
       display: flex;
       align-items: center;
-      gap: 12px;
-      z-index: 12;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
-      pointer-events: auto;
+      gap: 6px;
+      color: #cbd5e1;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .field-size-control select {
+      height: 38px;
+      padding: 0 8px;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      font: inherit;
+      color-scheme: dark;
+    }
+    .field-size-control select:disabled {
+      opacity: 0.6;
     }
     .pipe-step {
       display: flex;
@@ -870,10 +852,10 @@
 
     /* --- ИНТЕРАКТИВНАЯ ЛЕГЕНДА СЦЕНЫ (ПОЯСНЕНИЕ ВСЕХ ОБЪЕКТОВ) --- */
     .scene-legend-card {
-      position: absolute;
-      top: 130px;
-      right: 14px;
       width: 270px;
+      max-width: 100%;
+      max-height: 45vh;
+      overflow-y: auto;
       background: rgba(15, 23, 42, 0.92);
       backdrop-filter: blur(12px);
       border: 1px solid rgba(56, 189, 248, 0.3);
@@ -965,7 +947,6 @@
     <div class="topbar-left">
       <div class="brand-card">
         <div class="brand-title">ИННАГРИКА 2026</div>
-        <div class="brand-sub">Полигон 18 × 16 м</div>
       </div>
 
       <div class="cam-group">
@@ -981,30 +962,6 @@
         <button class="btn-speed" id="spd4">4×</button>
         <button class="btn-speed" id="spd8">8×</button>
         <button class="btn-speed" id="spd16">16×</button>
-      </div>
-    </div>
-
-    <!-- ЦЕНТРАЛЬНАЯ ЧАСТЬ: Шаги миссии ТЗ (в потоке flex, НИКАКИХ наложений!) -->
-    <div class="topbar-center">
-      <div class="mission-pipeline-card" id="missionPipeline">
-        <div class="pipeline-steps-row">
-          <div class="pipe-step active" id="pipe1">
-            <span>🔍 1. Разведка</span>
-          </div>
-          <span class="pipe-arrow">➔</span>
-          <div class="pipe-step" id="pipe2">
-            <span>🛡️ 2. Валидация</span>
-          </div>
-          <span class="pipe-arrow">➔</span>
-          <div class="pipe-step" id="pipe3">
-            <span>🎯 3. Обработка (6)</span>
-          </div>
-          <span class="pipe-arrow">➔</span>
-          <div class="pipe-step" id="pipe4">
-            <span>🏁 4. Финиш</span>
-          </div>
-        </div>
-        <div class="pipeline-subtext" id="pipelineSubtext">Ожидание команды оператора · Нажмите «⚡ Запуск цепочки»</div>
       </div>
     </div>
 
@@ -1036,10 +993,6 @@
           <span class="telemetry-value" id="speedValue">0.00 м/с</span>
         </div>
         <div class="telemetry-row">
-          <span class="telemetry-label">РАЗВЕДКА КАРТЫ:</span>
-          <span class="telemetry-value" id="targetsDiscoveredValue" style="color:#38bdf8;">0 / 10 ЦЕЛЕЙ</span>
-        </div>
-        <div class="telemetry-row">
           <span class="telemetry-label">ОБОРУДОВАНИЕ:</span>
           <span class="telemetry-value">
             <span class="payload-indicator" id="payloadLed"></span>
@@ -1054,6 +1007,7 @@
     </div>
   </div>
 
+  <div class="mission-panels">
   <!-- Интерактивная легенда объектов сцены -->
   <div class="scene-legend-card" id="sceneLegend">
     <div class="legend-title">
@@ -1103,6 +1057,20 @@
           <span>Включение светодиода на 2,0 с только при подтверждённом допуске.</span>
         </div>
       </div>
+    </div>
+  </div>
+
+    <div class="mission-pipeline-card" id="missionPipeline">
+      <div class="pipeline-steps-row">
+        <div class="pipe-step active" id="pipe1"><span>🔍 1. Разведка</span></div>
+        <span class="pipe-arrow">➔</span>
+        <div class="pipe-step" id="pipe2"><span>🛡️ 2. Валидация</span></div>
+        <span class="pipe-arrow">➔</span>
+        <div class="pipe-step" id="pipe3"><span>🎯 3. Обработка (6)</span></div>
+        <span class="pipe-arrow">➔</span>
+        <div class="pipe-step" id="pipe4"><span>🏁 4. Финиш</span></div>
+      </div>
+      <div class="pipeline-subtext" id="pipelineSubtext">Ожидание команды оператора · Нажмите «⚡ Запуск цепочки»</div>
     </div>
   </div>
 
@@ -1192,10 +1160,17 @@
   </div>
 
   <div class="hud-controls">
+    <label class="field-size-control">
+      Размер поля
+      <select id="fieldSize">
+        <option value="original">18 × 16 м</option>
+        <option value="half">9 × 8 м</option>
+        <option value="compact">6 × 4 м</option>
+      </select>
+    </label>
     <button class="btn btn-chain" id="btnRunChain" title="Автоматический запуск полной миссии ТЗ">⚡ Запуск цепочки ТЗ</button>
     <button class="btn btn-primary" id="btnTakeoff">🚀 Взлет (1.2м)</button>
     <button class="btn" id="btnLand">🛬 Посадка</button>
-    <button class="btn btn-success" id="btnPayload">💡 Тест LED (2с)</button>
     <button class="btn" id="btnToggleSlam">🗺️ Карта</button>
     <button class="btn" id="btnToggleLegend">📋 Справка ТЗ</button>
     <button class="btn" id="btnToggleLabels">🏷️ 3D-Метки</button>
@@ -1481,8 +1456,25 @@
     })();
   </script>
   <script>
-    const FIELD_WIDTH = 18.0;
-    const FIELD_HEIGHT = 16.0;
+    const query = new URLSearchParams(window.location.search);
+    const fieldSizeSelect = document.getElementById('fieldSize');
+    const fieldSizes = new Map([
+      ['original', { width: 18, height: 16, zoneJitter: 0.6 }],
+      ['half', { width: 9, height: 8, zoneJitter: 0.3 }],
+      ['compact', { width: 6, height: 4, zoneJitter: 0.2 }]
+    ]);
+    const requestedField = query.get('field');
+    const fieldSize = fieldSizes.has(requestedField) ? requestedField : 'original';
+    const { width: FIELD_WIDTH, height: FIELD_HEIGHT, zoneJitter } = fieldSizes.get(fieldSize);
+    const fieldScaleX = FIELD_WIDTH / fieldSizes.get('original').width;
+    const fieldScaleY = FIELD_HEIGHT / fieldSizes.get('original').height;
+    fieldSizeSelect.value = fieldSize;
+    fieldSizeSelect.addEventListener('change', () => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('field', fieldSizeSelect.value);
+      window.location.assign(url.href);
+    });
+
     const FIELD_CENTER = { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2 };
     const NOMINAL_ALT = 1.2;
     const MAX_SPEED = 0.4;
@@ -1537,7 +1529,27 @@
         w: 2.0, h: 2.8,
         name: "NFZ-4"
       }
-    ].map(zone => ({ ...zone, anchorX: zone.cx, anchorY: zone.cy }));
+    ];
+    const compactZones = [
+      { cx: 2.0, cy: 1.1 }, { cx: 4.4, cy: 1.1 },
+      { cx: 2.0, cy: 2.8, w: 0.55, h: 0.55 },
+      { cx: 4.4, cy: 2.8, w: 0.55, h: 0.55 }
+    ];
+    nfzZones.forEach((zone, index) => {
+      if (fieldSize === 'compact') {
+        Object.assign(zone, compactZones[index]);
+      } else {
+        zone.cx *= fieldScaleX;
+        zone.cy *= fieldScaleY;
+        // Размеры первых двух зон учитывают габариты оборудования внутри них.
+        if (index >= 2) {
+          zone.w *= fieldScaleX;
+          zone.h *= fieldScaleY;
+        }
+      }
+      zone.anchorX = zone.cx;
+      zone.anchorY = zone.cy;
+    });
 
     function updateNfzBarrier(zone) {
       zone.barrier = {
@@ -2223,11 +2235,6 @@
     const motorRPM = [0, 0, 0, 0]; // M1..M4 в процентах 0..100%
 
 
-    function updateHUDDiscoveredCount(cnt) {
-      const el = document.getElementById('targetsDiscoveredValue');
-      if (el) el.textContent = `${cnt} / 10 ЦЕЛЕЙ`;
-    }
-
     let toastTimeout = null;
     function showDiscoveryToast(t) {
       const el = document.getElementById('discoveryToast');
@@ -2434,8 +2441,8 @@
     // --- РАНДОМИЗАЦИЯ ПОЛОЖЕНИЯ ПРЕПЯТСТВИЙ NFZ НА ПОЛИГОНЕ ---
     function randomizeNfzPositions() {
       for (const zone of nfzZones) {
-        zone.cx = zone.anchorX + (Math.random() - 0.5) * 0.6;
-        zone.cy = zone.anchorY + (Math.random() - 0.5) * 0.6;
+        zone.cx = zone.anchorX + (Math.random() - 0.5) * zoneJitter;
+        zone.cy = zone.anchorY + (Math.random() - 0.5) * zoneJitter;
         updateNfzBarrier(zone);
         zone.group?.position.set(zone.cx, zone.cy, 0);
         zone.mesh.position.set(zone.cx, zone.cy, NFZ_MAX_Z / 2);
@@ -2502,14 +2509,21 @@
         { xMin: 15.9, xMax: 17.25, yMin: 6.3, yMax: 9.5, name: 'Очаг A-6 (Восток)' }
       ];
 
+      const compactTargets = [
+        [0.9, 0.55], [3.25, 0.6], [0.9, 3.4],
+        [3.25, 3.45], [5.45, 3.45], [5.45, 1.8]
+      ];
       zonesA.forEach((z, idx) => {
+        const [compactX, compactY] = compactTargets[idx];
         targetsData.push({
           id: idx + 1,
           actionId: `MAP-${currentMapRevision}-A${idx + 1}`,
           type: 'A',
           name: z.name,
-          x: z.xMin + Math.random() * (z.xMax - z.xMin),
-          y: z.yMin + Math.random() * (z.yMax - z.yMin),
+          x: fieldSize === 'compact' ? compactX + (Math.random() - 0.5) * 0.2
+            : (z.xMin + Math.random() * (z.xMax - z.xMin)) * fieldScaleX,
+          y: fieldSize === 'compact' ? compactY + (Math.random() - 0.5) * 0.2
+            : (z.yMin + Math.random() * (z.yMax - z.yMin)) * fieldScaleY,
           discovered: false,
           treated: false
         });
@@ -2521,8 +2535,8 @@
         actionId: `MAP-${currentMapRevision}-B9`,
         type: 'B',
         name: 'Участок B-9 (Наблюдение)',
-        x: 1.0 + Math.random() * 1.8,
-        y: 6.8 + Math.random() * 2.4,
+        x: fieldSize === 'compact' ? 1.0 + Math.random() * 0.2 : (1.0 + Math.random() * 1.8) * fieldScaleX,
+        y: fieldSize === 'compact' ? 2.0 + Math.random() * 0.2 : (6.8 + Math.random() * 2.4) * fieldScaleY,
         discovered: false,
         treated: false
       });
@@ -2533,8 +2547,8 @@
         actionId: `MAP-${currentMapRevision}-U10`,
         type: 'U',
         name: 'Участок U-10 (Неопределённая текстура)',
-        x: 14.7 + Math.random() * 1.9,
-        y: 2.1 + Math.random() * 1.8,
+        x: fieldSize === 'compact' ? 3.1 + Math.random() * 0.2 : (14.7 + Math.random() * 1.9) * fieldScaleX,
+        y: fieldSize === 'compact' ? 2.0 + Math.random() * 0.2 : (2.1 + Math.random() * 1.8) * fieldScaleY,
         discovered: false,
         treated: false
       });
@@ -2610,7 +2624,6 @@
       });
 
       drone1State.memory = [];
-      updateHUDDiscoveredCount(0);
 
       drone1State.waypoints = generateReconSweep();
       drone1State.coverageChecked = false;
@@ -3140,6 +3153,7 @@
 
     const keys = {};
     window.addEventListener('keydown', e => {
+      if (e.target === fieldSizeSelect) return;
       keys[e.key.toLowerCase()] = true;
       keys[e.code] = true;
       if (e.key.toLowerCase() === 'l' && activeDrone === drone2State) triggerPayloadLED();
@@ -3308,13 +3322,6 @@
       activeDrone.targetZ = 0.08;
       activeDrone.fsm = 'LANDING';
     };
-    document.getElementById('btnPayload').onclick = () => {
-      if (activeDrone !== drone2State) {
-        alert("Полезная светодиодная нагрузка установлена только на БПЛА-2 (Исполнитель)!");
-        return;
-      }
-      triggerPayloadLED();
-    };
     document.getElementById('btnReset').onclick = () => {
       chainRunning = false;
       chainStage = 0;
@@ -3471,8 +3478,6 @@
         return;
       }
       drone1State.memory = [];
-      drone1State.discoveredCount = 0;
-      updateHUDDiscoveredCount(0);
       planExecutorMissionFromMemory();
 
       chainRunning = true;
@@ -3646,7 +3651,6 @@
               }
 
               st.memory.push(t);
-              updateHUDDiscoveredCount(st.memory.length);
               showDiscoveryToast(t);
 
               // Маршрут пересчитывается при новом разрешённом наблюдении до вылета исполнителя.
@@ -4103,6 +4107,8 @@
     }
 
     function updateHUD() {
+      fieldSizeSelect.disabled = chainRunning ||
+        [drone1State, drone2State].some(drone => drone.z >= 0.15 || drone.targetZ >= 0.15);
       document.getElementById('coordsValue').textContent = `X:${activeDrone.x.toFixed(2)} Y:${activeDrone.y.toFixed(2)} Z:${activeDrone.z.toFixed(2)}м`;
 
       const speed = Math.sqrt(activeDrone.vx * activeDrone.vx + activeDrone.vy * activeDrone.vy);
@@ -4231,7 +4237,6 @@
     animate();
 
     // Режим используется только для воспроизводимой автоматической проверки в браузере.
-    const query = new URLSearchParams(window.location.search);
     window.__MISSION_SMOKE_TEST__ = query.get('smoketest') === '1';
     if (query.get('autostart') === '1') {
       const requestedSpeed = Number(query.get('speed') || '8');

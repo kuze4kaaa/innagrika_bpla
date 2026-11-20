@@ -1459,13 +1459,13 @@
     const query = new URLSearchParams(window.location.search);
     const fieldSizeSelect = document.getElementById('fieldSize');
     const fieldSizes = new Map([
-      ['original', { width: 18, height: 16, zoneJitter: 0.6 }],
-      ['half', { width: 9, height: 8, zoneJitter: 0.3 }],
-      ['compact', { width: 6, height: 4, zoneJitter: 0.2 }]
+      ['original', { width: 18, height: 16, zoneJitter: 0.6, zoneCount: 4 }],
+      ['half', { width: 9, height: 8, zoneJitter: 0.3, zoneCount: 3 }],
+      ['compact', { width: 6, height: 4, zoneJitter: 0.2, zoneCount: 2 }]
     ]);
     const requestedField = query.get('field');
     const fieldSize = fieldSizes.has(requestedField) ? requestedField : 'original';
-    const { width: FIELD_WIDTH, height: FIELD_HEIGHT, zoneJitter } = fieldSizes.get(fieldSize);
+    const { width: FIELD_WIDTH, height: FIELD_HEIGHT, zoneJitter, zoneCount } = fieldSizes.get(fieldSize);
     const fieldScaleX = FIELD_WIDTH / fieldSizes.get('original').width;
     const fieldScaleY = FIELD_HEIGHT / fieldSizes.get('original').height;
     fieldSizeSelect.value = fieldSize;
@@ -1529,11 +1529,9 @@
         w: 2.0, h: 2.8,
         name: "NFZ-4"
       }
-    ];
+    ].slice(0, zoneCount);
     const compactZones = [
-      { cx: 2.0, cy: 1.1 }, { cx: 4.4, cy: 1.1 },
-      { cx: 2.0, cy: 2.8, w: 0.55, h: 0.55 },
-      { cx: 4.4, cy: 2.8, w: 0.55, h: 0.55 }
+      { cx: 2.0, cy: 1.1 }, { cx: 4.4, cy: 1.1 }
     ];
     nfzZones.forEach((zone, index) => {
       if (fieldSize === 'compact') {

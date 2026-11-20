@@ -466,7 +466,7 @@
     }
     .slam-canvas-wrap {
       width: 300px;
-      height: 200px;
+      height: 267px;
       background: #080d19;
       border: 1px solid #1e293b;
       border-radius: 6px;
@@ -475,7 +475,7 @@
     }
     #slamCanvas {
       width: 300px;
-      height: 200px;
+      height: 267px;
       display: block;
     }
     .slam-legend {
@@ -965,7 +965,7 @@
     <div class="topbar-left">
       <div class="brand-card">
         <div class="brand-title">ИННАГРИКА 2026</div>
-        <div class="brand-sub">Полигон 6 × 4 м</div>
+        <div class="brand-sub">Полигон 18 × 16 м</div>
       </div>
 
       <div class="cam-group">
@@ -980,6 +980,7 @@
         <button class="btn-speed" id="spd2">2×</button>
         <button class="btn-speed" id="spd4">4×</button>
         <button class="btn-speed" id="spd8">8×</button>
+        <button class="btn-speed" id="spd16">16×</button>
       </div>
     </div>
 
@@ -1138,7 +1139,7 @@
       <span class="slam-badge" id="slamCoverageBadge">ПОКРЫТИЕ: 0.0%</span>
     </div>
     <div class="slam-canvas-wrap">
-      <canvas id="slamCanvas" width="300" height="200"></canvas>
+      <canvas id="slamCanvas" width="300" height="267"></canvas>
     </div>
     <div class="slam-legend">
       <span class="legend-item"><span class="legend-box unscanned"></span> Туман</span>
@@ -1439,8 +1440,9 @@
     })();
   </script>
   <script>
-    const FIELD_WIDTH = 6.0;
-    const FIELD_HEIGHT = 4.0;
+    const FIELD_WIDTH = 18.0;
+    const FIELD_HEIGHT = 16.0;
+    const FIELD_CENTER = { x: FIELD_WIDTH / 2, y: FIELD_HEIGHT / 2 };
     const NOMINAL_ALT = 1.2;
     const MAX_SPEED = 0.4;
     const ALT_MIN = 1.0;
@@ -1472,31 +1474,50 @@
     const nfzZones = [
       {
         id: 1,
-        cx: 2.6, cy: 2.1,
+        cx: 5.2, cy: 5.6,
         w: 1.2, h: 1.0,
         name: "NFZ-1 (Центральный узел)"
       },
       {
         id: 2,
-        cx: 4.4, cy: 1.40,
+        cx: 12.4, cy: 4.8,
         w: 0.8, h: 0.8,
         name: "NFZ-2 (Оросительный модуль)"
+      },
+      {
+        id: 3,
+        cx: 6.2, cy: 11.5,
+        w: 2.6, h: 1.6,
+        name: "NFZ-3"
+      },
+      {
+        id: 4,
+        cx: 13.2, cy: 11.2,
+        w: 2.0, h: 2.8,
+        name: "NFZ-4"
       }
-    ];
+    ].map(zone => ({ ...zone, anchorX: zone.cx, anchorY: zone.cy }));
 
-    nfzZones.forEach(z => {
-      z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION);
-      z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION);
-      z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION);
-      z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION);
-    });
+    function updateNfzBarrier(zone) {
+      zone.barrier = {
+        minX: zone.cx - (zone.w / 2 + BUFFER_INFLATION),
+        maxX: zone.cx + (zone.w / 2 + BUFFER_INFLATION),
+        minY: zone.cy - (zone.h / 2 + BUFFER_INFLATION),
+        maxY: zone.cy + (zone.h / 2 + BUFFER_INFLATION)
+      };
+    }
+    nfzZones.forEach(updateNfzBarrier);
+
+    function crossesNoFlyZone(from, to) {
+      return nfzZones.some(zone => ReconSurvey.crossesInterior(from, to, zone.barrier));
+    }
 
     const NFZ_MAX_Z = 2.5;
 
     const container = document.getElementById('canvas3d');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x070b12);
-    scene.fog = new THREE.FogExp2(0x070b12, 0.035);
+    scene.fog = new THREE.FogExp2(0x070b12, 0.015);
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.up.set(0, 0, 1);
@@ -1513,22 +1534,30 @@
     controls.dampingFactor = 0.08;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
     controls.minDistance = 0.3;
-    controls.maxDistance = 15;
+    controls.maxDistance = Math.max(FIELD_WIDTH, FIELD_HEIGHT) * 4;
+
+    function fieldViewDistance() {
+      const halfSpan = Math.max(FIELD_HEIGHT / 2, FIELD_WIDTH / (2 * camera.aspect));
+      return halfSpan / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.35;
+    }
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
     const sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    sunLight.position.set(4, 1, 7);
+    sunLight.position.set(FIELD_CENTER.x + 1, FIELD_CENTER.y - 1, 8);
+    sunLight.target.position.set(FIELD_CENTER.x, FIELD_CENTER.y, 0);
+    scene.add(sunLight.target);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
     sunLight.shadow.camera.near = 0.5;
     sunLight.shadow.camera.far = 15;
-    sunLight.shadow.camera.left = -5;
-    sunLight.shadow.camera.right = 5;
-    sunLight.shadow.camera.top = 5;
-    sunLight.shadow.camera.bottom = -5;
+    const shadowHalfSpan = Math.hypot(FIELD_WIDTH, FIELD_HEIGHT) / 2;
+    sunLight.shadow.camera.left = -shadowHalfSpan;
+    sunLight.shadow.camera.right = shadowHalfSpan;
+    sunLight.shadow.camera.top = shadowHalfSpan;
+    sunLight.shadow.camera.bottom = -shadowHalfSpan;
     scene.add(sunLight);
 
     const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.3);
@@ -1539,7 +1568,6 @@
     // 1. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ: ТЕКСТУРЫ И 3D-ПОДПИСИ (THREE.Sprite)
     // =========================================================================
     let labelsVisible = true;
-    const allSceneLabels = [];
 
     // Аккуратный микро-пин над целевыми участками (компактный и не заслоняющий сцену)
     function createMicroPin(label, colorHex, icon = '🎯') {
@@ -1590,8 +1618,6 @@
         tex.needsUpdate = true;
       };
 
-      allSceneLabels.push(sprite);
-      sprite.visible = labelsVisible;
       return sprite;
     }
 
@@ -1682,6 +1708,9 @@
       color: 0x332216,
       roughness: 0.95
     });
+    const sproutTransforms = [];
+    const sproutTransform = new THREE.Object3D();
+    sproutTransform.rotation.x = Math.PI / 2;
     for (let y = 0.35; y < FIELD_HEIGHT; y += 0.42) {
       const bed = new THREE.Mesh(new THREE.BoxGeometry(FIELD_WIDTH - 0.2, 0.26, 0.015), bedMat);
       bed.position.set(FIELD_WIDTH / 2, y, 0.008);
@@ -1690,20 +1719,22 @@
 
       // Ровные ряды всходов рассады культурных растений
       for (let x = 0.35; x < FIELD_WIDTH - 0.25; x += 0.34) {
-        // Пропускаем места стартовых площадок и шкафов NFZ
-        if ((x < 0.9 && y < 1.6) || (x > 2.0 && x < 3.2 && y > 1.6 && y < 2.6) || (x > 3.9 && x < 4.9 && y > 0.9 && y < 1.9)) continue;
-        const sprout = new THREE.Mesh(
-          new THREE.ConeGeometry(0.024, 0.045, 5),
-          new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.7 })
-        );
-        sprout.rotation.x = Math.PI / 2;
-        sprout.position.set(x + (Math.random() - 0.5) * 0.03, y + (Math.random() - 0.5) * 0.02, 0.025);
-        scene.add(sprout);
+        if (x < 0.9 && y < 1.6) continue;
+        sproutTransform.position.set(x + (Math.random() - 0.5) * 0.03, y + (Math.random() - 0.5) * 0.02, 0.025);
+        sproutTransform.updateMatrix();
+        sproutTransforms.push(sproutTransform.matrix.clone());
       }
     }
+    const sprouts = new THREE.InstancedMesh(
+      new THREE.ConeGeometry(0.024, 0.045, 5),
+      new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.7 }),
+      sproutTransforms.length
+    );
+    sproutTransforms.forEach((matrix, index) => sprouts.setMatrixAt(index, matrix));
+    scene.add(sprouts);
 
     // =========================================================================
-    // 3. КООРДИНАТНАЯ РАЗМЕТКА ПОЛЯ F (6 × 4 м) И НАЧАЛО КООРДИНАТ (0,0)
+    // 3. КООРДИНАТНАЯ РАЗМЕТКА ПОЛЯ F И НАЧАЛО КООРДИНАТ (0,0)
     // =========================================================================
     // Бело-желтый бордюр полигона
     const borderPoints = [
@@ -1743,7 +1774,7 @@
     
 
     // =========================================================================
-    // 4. ОГРАЖДЕННАЯ ЗОНА ДЛЯ ПОЛЕТОВ (ЛЕТНЫЙ КУПОЛ 6 × 4 × 2.5 м)
+    // 4. ОГРАЖДЕННАЯ ЗОНА ДЛЯ ПОЛЕТОВ (ЛЕТНЫЙ КУПОЛ ВЫСОТОЙ 2.5 м)
     // =========================================================================
     // 4 угловые алюминиевые ферменные стойки ограждения
     const trussMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
@@ -1886,7 +1917,7 @@
     const nfzMeshes = [];
     const hazardTex = createHazardTexture();
 
-    // NFZ-1: Шкаф автоматики климат-контроля и полива (в центре cx=2.6, cy=2.1)
+    // NFZ-1: Шкаф автоматики климат-контроля и полива
     const z1 = nfzZones[0];
     const cabGroup = new THREE.Group();
     cabGroup.position.set(z1.cx, z1.cy, 0);
@@ -2105,15 +2136,20 @@
     let targetsData = [];
     let targetMeshes = [];
 
-    // --- 2D SLAM Occupancy Grid (60 x 40 клеток по 0.1 м) ---
-    const SLAM_COLS = 60;
-    const SLAM_ROWS = 40;
-    const SLAM_RES = 0.1; // 10 см на клетку (полигон 6.0 x 4.0 м)
+    // --- Сетка SLAM, 10 см на клетку ---
+    const SLAM_RES = 0.1;
+    const SLAM_COLS = Math.round(FIELD_WIDTH / SLAM_RES);
+    const SLAM_ROWS = Math.round(FIELD_HEIGHT / SLAM_RES);
     // 0: Неотсканировано (туман), 1: Свободно, 2: Стена, 3: Внутри фигуры стен (сплошная преграда)
     const slamGrid = new Uint8Array(SLAM_COLS * SLAM_ROWS);
     let slamCoverage = 0.0;
-    let slamWallsCount = 0;
+    let scannedReachableCells = 0;
     let totalReachableCells = 0;
+    const slamTerrain = document.createElement('canvas');
+    slamTerrain.width = SLAM_COLS;
+    slamTerrain.height = SLAM_ROWS;
+    const slamTerrainCtx = slamTerrain.getContext('2d');
+    const slamColors = ['', '#15803d', '#f59e0b', '#b91c1c'];
 
     // Расчет достижимых клеток поля (без внутренних объемов NFZ)
     const isReachableGrid = new Uint8Array(SLAM_COLS * SLAM_ROWS);
@@ -2180,80 +2216,50 @@
 
     
     // Функция сканирования сенсором камеры и заполнения SLAM-карты
-        // Функция сканирования сенсором камеры и заполнения SLAM-карты
     function updateSlamScan(px, py, pz) {
       if (pz < 0.15) return;
       // Реальная зона обзора камеры: полуразмеры проекции конуса на земле (угол FOV ~80°)
       const { x: w, y: d } = cameraFootprint(pz);
-      let newlyScanned = false;
+      const firstCol = Math.max(0, Math.ceil((px - w) / SLAM_RES - 0.5));
+      const lastCol = Math.min(SLAM_COLS - 1, Math.floor((px + w) / SLAM_RES - 0.5));
+      const firstRow = Math.max(0, Math.ceil((py - d) / SLAM_RES - 0.5));
+      const lastRow = Math.min(SLAM_ROWS - 1, Math.floor((py + d) / SLAM_RES - 0.5));
+      const previousCount = scannedReachableCells;
 
-      for (let c = 0; c < SLAM_COLS; c++) {
-        const cx = (c + 0.5) * SLAM_RES;
-        if (Math.abs(cx - px) > w + 0.05) continue;
-
-        for (let r = 0; r < SLAM_ROWS; r++) {
-          const cy = (r + 0.5) * SLAM_RES;
-          if (Math.abs(cy - py) > d + 0.05) continue;
-
-          // Клетка попадает строго в видимый световой конус камеры на земле:
-          if (Math.abs(cx - px) <= w && Math.abs(cy - py) <= d) {
-            const idx = r * SLAM_COLS + c;
-
-            let isWall = false;
-            let isInside = false;
-
-            nfzZones.forEach(z => {
-              const xMin = z.cx - z.w / 2;
-              const xMax = z.cx + z.w / 2;
-              const yMin = z.cy - z.h / 2;
-              const yMax = z.cy + z.h / 2;
-
-              // Периметр — обнаруженная физическая стена / барьер
-              const onBorderX = (Math.abs(cx - xMin) <= 0.15 || Math.abs(cx - xMax) <= 0.15) && (cy >= yMin - 0.10 && cy <= yMax + 0.10);
-              const onBorderY = (Math.abs(cy - yMin) <= 0.15 || Math.abs(cy - yMax) <= 0.15) && (cx >= xMin - 0.10 && cx <= xMax + 0.10);
-
-              if (onBorderX || onBorderY) {
-                isWall = true;
-              } else if (cx > xMin && cx < xMax && cy > yMin && cy < yMax) {
-                // Если найдена фигура из стен, внутри тоже считается стеной!
-                isInside = true;
-              }
-            });
-
-            if (isWall) {
-              if (slamGrid[idx] !== 2) {
-                slamGrid[idx] = 2;
-                slamWallsCount++;
-                newlyScanned = true;
-              }
-            } else if (isInside) {
-              if (slamGrid[idx] !== 3) {
-                slamGrid[idx] = 3;
-                newlyScanned = true;
-              }
-            } else {
-              if (slamGrid[idx] === 0) {
-                slamGrid[idx] = 1; // Проверенная свободная зона
-                newlyScanned = true;
-              }
-            }
-          }
+      for (let r = firstRow; r <= lastRow; r++) {
+        const cy = (r + 0.5) * SLAM_RES;
+        for (let c = firstCol; c <= lastCol; c++) {
+          const index = r * SLAM_COLS + c;
+          if (slamGrid[index] !== 0) continue;
+          const cx = (c + 0.5) * SLAM_RES;
+          const isWall = nfzZones.some(z => {
+            const xMin = z.cx - z.w / 2;
+            const xMax = z.cx + z.w / 2;
+            const yMin = z.cy - z.h / 2;
+            const yMax = z.cy + z.h / 2;
+            const onBorderX = (Math.abs(cx - xMin) <= 0.15 || Math.abs(cx - xMax) <= 0.15) &&
+              cy >= yMin - 0.10 && cy <= yMax + 0.10;
+            const onBorderY = (Math.abs(cy - yMin) <= 0.15 || Math.abs(cy - yMax) <= 0.15) &&
+              cx >= xMin - 0.10 && cx <= xMax + 0.10;
+            return onBorderX || onBorderY;
+          });
+          const reachable = isReachableGrid[index] === 1;
+          const terrain = isWall ? 2 : (reachable ? 1 : 3);
+          slamGrid[index] = terrain;
+          slamTerrainCtx.fillStyle = slamColors[terrain];
+          slamTerrainCtx.fillRect(c, SLAM_ROWS - 1 - r, 1, 1);
+          if (reachable) scannedReachableCells++;
         }
       }
 
-      if (newlyScanned) {
-        // Честный расчет покрытия SLAM: доля реально рассеянного тумана войны на всей доступной площади
-        let fogOutsideNfz = 0;
-        for (let i = 0; i < slamGrid.length; i++) {
-          if (slamGrid[i] === 0 && isReachableGrid[i] === 1) fogOutsideNfz++;
-        }
-        slamCoverage = Math.max(0.0, ((totalReachableCells - fogOutsideNfz) / totalReachableCells) * 100.0);
+      if (scannedReachableCells !== previousCount) {
+        slamCoverage = (scannedReachableCells / totalReachableCells) * 100;
         const badge = document.getElementById('slamCoverageBadge');
         if (badge) badge.textContent = `ПОКРЫТИЕ: ${slamCoverage.toFixed(1)}%`;
       }
     }
 
-    // Отрисовка 2D-карты SLAM на HTML5 Canvas (300 x 200 px)
+    // Отрисовка 2D-карты SLAM на HTML5 Canvas
     const slamCanvas = document.getElementById('slamCanvas');
     const slamCtx = slamCanvas ? slamCanvas.getContext('2d') : null;
 
@@ -2261,47 +2267,16 @@
       if (!slamCtx) return;
       const W = slamCanvas.width;
       const H = slamCanvas.height;
-      const scaleX = W / FIELD_WIDTH;  // 50 px/м
-      const scaleY = H / FIELD_HEIGHT; // 50 px/м
+      const scaleX = W / FIELD_WIDTH;
+      const scaleY = H / FIELD_HEIGHT;
 
       // 1. Очистка фона (туман войны)
       slamCtx.fillStyle = '#060a14';
       slamCtx.fillRect(0, 0, W, H);
 
-      // 2. Отрисовка клеток Occupancy Grid (проверенная зона закрашивается!)
-      const cellW = W / SLAM_COLS;
-      const cellH = H / SLAM_ROWS;
-
-      for (let c = 0; c < SLAM_COLS; c++) {
-        for (let r = 0; r < SLAM_ROWS; r++) {
-          const val = slamGrid[r * SLAM_COLS + c];
-          const px = c * cellW;
-          const py = H - (r + 1) * cellH; // Инвертируем Y для совпадения с миром
-
-          if (val === 1) {
-            // Четко закрашенная проверенная зона (насыщенный зеленый цвет)
-            slamCtx.fillStyle = '#15803d';
-            slamCtx.fillRect(px, py, cellW + 0.6, cellH + 0.6);
-          } else if (val === 2) {
-            // Обнаруженная стена (янтарно-оранжевая)
-            slamCtx.fillStyle = '#f59e0b';
-            slamCtx.fillRect(px, py, cellW + 0.6, cellH + 0.6);
-          } else if (val === 3) {
-            // Внутренность фигуры из стен (сплошная темно-красная преграда)
-            slamCtx.fillStyle = '#b91c1c';
-            slamCtx.fillRect(px, py, cellW + 0.6, cellH + 0.6);
-          } else {
-            // Неотсканированный туман: легкие координатные точки
-            if (c % 4 === 0 && r % 4 === 0) {
-              slamCtx.fillStyle = '#1e293b';
-              slamCtx.fillRect(px, py, 1.5, 1.5);
-            }
-          }
-        }
-      }
-
-      // 3. 100% честный SLAM: никаких синтетических прямоугольников поверх карты!
-      // Отображаются исключительно те пиксели стен (оранжевые), которые физически зафиксировал сенсор камеры.
+      slamCtx.imageSmoothingEnabled = false;
+      slamCtx.drawImage(slamTerrain, 0, 0, W, H);
+      slamCtx.imageSmoothingEnabled = true;
 
       // 4. Посадочные площадки Home
       // Home-1 (0.4, 0.4)
@@ -2409,45 +2384,14 @@
 
     // --- РАНДОМИЗАЦИЯ ПОЛОЖЕНИЯ ПРЕПЯТСТВИЙ NFZ НА ПОЛИГОНЕ ---
     function randomizeNfzPositions() {
-      const z1 = nfzZones[0];
-      const z2 = nfzZones[1];
-
-      let valid = false;
-      let attempts = 0;
-      while (!valid && attempts < 300) {
-        attempts++;
-        // NFZ-1 (Шкаф автоматики 1.2 x 1.0 м): лево-центральная зона
-        z1.cx = 2.30 + Math.random() * 0.40; // 2.30 .. 2.70
-        z1.cy = 1.95 + Math.random() * 0.35; // 1.95 .. 2.30
-
-        // NFZ-2 (Метеомачта 0.8 x 0.8 м): право-центральная зона
-        z2.cx = 4.20 + Math.random() * 0.40; // 4.20 .. 4.60
-        z2.cy = 1.30 + Math.random() * 0.30; // 1.30 .. 1.60
-
-        // Гарантированный зазор между физическими телами преград не менее 0.70 м:
-        const gapX = (z2.cx - z2.w / 2) - (z1.cx + z1.w / 2);
-        if (gapX >= 0.70) {
-          valid = true;
-        }
+      for (const zone of nfzZones) {
+        zone.cx = zone.anchorX + (Math.random() - 0.5) * 0.6;
+        zone.cy = zone.anchorY + (Math.random() - 0.5) * 0.6;
+        updateNfzBarrier(zone);
+        zone.group?.position.set(zone.cx, zone.cy, 0);
+        zone.mesh.position.set(zone.cx, zone.cy, NFZ_MAX_Z / 2);
+        zone.bLine.position.set(zone.cx, zone.cy, NFZ_MAX_Z / 2);
       }
-
-      // Пересчёт зон безопасности. BUFFER_INFLATION уже включает радиус БПЛА.
-      nfzZones.forEach(z => {
-        z.barrierMinX = z.cx - (z.w / 2 + BUFFER_INFLATION);
-        z.barrierMaxX = z.cx + (z.w / 2 + BUFFER_INFLATION);
-        z.barrierMinY = z.cy - (z.h / 2 + BUFFER_INFLATION);
-        z.barrierMaxY = z.cy + (z.h / 2 + BUFFER_INFLATION);
-      });
-
-      // Перемещение 3D-моделей оборудования
-      if (z1.group) z1.group.position.set(z1.cx, z1.cy, 0);
-      if (z2.group) z2.group.position.set(z2.cx, z2.cy, 0);
-
-      // Перемещение 3D-призм и желтых пунктирных контуров
-      nfzZones.forEach(z => {
-        if (z.mesh) z.mesh.position.set(z.cx, z.cy, NFZ_MAX_Z / 2);
-        if (z.bLine) z.bLine.position.set(z.cx, z.cy, NFZ_MAX_Z / 2);
-      });
 
       // Пересчет сетки достижимости для честного расчета покрытия SLAM
       recomputeReachableGrid();
@@ -2455,29 +2399,23 @@
 
     function generateRandomTargets() {
       currentMapRevision++;
-      // 1. Рандомизируем положение препятствий (NFZ-1 и NFZ-2)
       randomizeNfzPositions();
 
-      // 2. Удаляем старые меши и спрайты целей со сцены
       targetMeshes.forEach(tm => {
-        scene.remove(tm.group);
-        if (tm.sprite) {
-          scene.remove(tm.sprite);
-          const sIdx = allSceneLabels.indexOf(tm.sprite);
-          if (sIdx !== -1) allSceneLabels.splice(sIdx, 1);
-        }
+        scene.remove(tm.group, tm.sprite);
       });
+      clearTimeout(toastTimeout);
+      document.getElementById('discoveryToast').style.display = 'none';
       targetMeshes = [];
       targetsData = [];
 
       // Сброс SLAM-сетки и покрытия при генерации новой карты
-      if (typeof slamGrid !== 'undefined') {
-        slamGrid.fill(0);
-        slamCoverage = 0.0;
-        slamWallsCount = 0;
-        const covBadge = document.getElementById('slamCoverageBadge');
-        if (covBadge) covBadge.textContent = 'ПОКРЫТИЕ: 0.0%';
-      }
+      slamGrid.fill(0);
+      slamTerrainCtx.clearRect(0, 0, SLAM_COLS, SLAM_ROWS);
+      slamCoverage = 0;
+      scannedReachableCells = 0;
+      const covBadge = document.getElementById('slamCoverageBadge');
+      if (covBadge) covBadge.textContent = 'ПОКРЫТИЕ: 0.0%';
 
       const z1 = nfzZones[0];
       const z2 = nfzZones[1];
@@ -2504,44 +2442,24 @@
         treated: false
       });
 
-      // Функция проверки, попадает ли точка в запретный барьер NFZ:
-      function isInsideAnyNfzBarrier(px, py) {
-        for (let i = 0; i < nfzZones.length; i++) {
-          const z = nfzZones[i];
-          const extra = ROUTE_CLEARANCE - BUFFER_INFLATION;
-          if (px >= z.barrierMinX - extra && px <= z.barrierMaxX + extra &&
-              py >= z.barrierMinY - extra && py <= z.barrierMaxY + extra) {
-            return true;
-          }
-        }
-        return false;
-      }
-
-      // 6 очагов класса A в разрешенных агрономических зонах:
+      // Диапазоны лежат вне расширенных NFZ при любом смещении их центров.
       const zonesA = [
-        { xMin: 0.90, xMax: 1.30, yMin: 0.55, yMax: 0.90, name: 'Очаг A-1 (Юго-Запад)' },
-        { xMin: 2.10, xMax: 3.10, yMin: 0.36, yMax: 0.50, name: 'Очаг A-2 (Юг)' },
-        { xMin: 0.90, xMax: 1.30, yMin: 3.25, yMax: 3.55, name: 'Очаг A-3 (Северо-Запад)' },
-        { xMin: 2.10, xMax: 3.10, yMin: 3.25, yMax: 3.55, name: 'Очаг A-4 (Север)' },
-        { xMin: 4.10, xMax: 5.20, yMin: 3.25, yMax: 3.55, name: 'Очаг A-5 (Северо-Восток)' },
-        { xMin: 5.35, xMax: 5.55, yMin: 2.10, yMax: 2.70, name: 'Очаг A-6 (Восток)' }
+        { xMin: 1.3, xMax: 3.0, yMin: 1.4, yMax: 3.0, name: 'Очаг A-1 (Юго-Запад)' },
+        { xMin: 7.4, xMax: 10.5, yMin: 1.3, yMax: 2.8, name: 'Очаг A-2 (Юг)' },
+        { xMin: 1.5, xMax: 3.6, yMin: 11.5, yMax: 14.0, name: 'Очаг A-3 (Северо-Запад)' },
+        { xMin: 8.3, xMax: 10.5, yMin: 10.0, yMax: 14.4, name: 'Очаг A-4 (Север)' },
+        { xMin: 14.3, xMax: 16.9, yMin: 13.4, yMax: 15.1, name: 'Очаг A-5 (Северо-Восток)' },
+        { xMin: 15.9, xMax: 17.25, yMin: 6.3, yMax: 9.5, name: 'Очаг A-6 (Восток)' }
       ];
 
       zonesA.forEach((z, idx) => {
-        let tx = 0, ty = 0, ok = false, tries = 0;
-        while (!ok && tries < 50) {
-          tries++;
-          tx = z.xMin + Math.random() * (z.xMax - z.xMin);
-          ty = z.yMin + Math.random() * (z.yMax - z.yMin);
-          if (!isInsideAnyNfzBarrier(tx, ty)) ok = true;
-        }
         targetsData.push({
           id: idx + 1,
           actionId: `MAP-${currentMapRevision}-A${idx + 1}`,
           type: 'A',
           name: z.name,
-          x: tx,
-          y: ty,
+          x: z.xMin + Math.random() * (z.xMax - z.xMin),
+          y: z.yMin + Math.random() * (z.yMax - z.yMin),
           discovered: false,
           treated: false
         });
@@ -2553,8 +2471,8 @@
         actionId: `MAP-${currentMapRevision}-B9`,
         type: 'B',
         name: 'Участок B-9 (Наблюдение)',
-        x: 0.70 + Math.random() * 0.30,
-        y: 1.90 + Math.random() * 0.50,
+        x: 1.0 + Math.random() * 1.8,
+        y: 6.8 + Math.random() * 2.4,
         discovered: false,
         treated: false
       });
@@ -2565,8 +2483,8 @@
         actionId: `MAP-${currentMapRevision}-U10`,
         type: 'U',
         name: 'Участок U-10 (Неопределённая текстура)',
-        x: 5.30 + Math.random() * 0.25,
-        y: 0.70 + Math.random() * 0.40,
+        x: 14.7 + Math.random() * 1.9,
+        y: 2.1 + Math.random() * 1.8,
         discovered: false,
         treated: false
       });
@@ -2575,6 +2493,7 @@
       targetsData.forEach(t => {
         const tGroup = new THREE.Group();
         tGroup.position.set(t.x, t.y, 0.012);
+        tGroup.visible = false;
 
         // Земляной кругляш под растением
         const soilBed = new THREE.Mesh(
@@ -2627,7 +2546,7 @@
 
         const sprite = createMicroPin(pinText, pinColor, pinIcon);
         sprite.position.set(t.x, t.y, 0.16);
-        sprite.material.opacity = 0.35; // До разведки приглушен
+        sprite.visible = false;
         scene.add(sprite);
 
         targetMeshes.push({
@@ -3055,19 +2974,17 @@
       trailGeo.attributes.position.needsUpdate = true;
     }
 
-    const speedButtons = [
-      { id: 'spd1', mult: 1.0 },
-      { id: 'spd2', mult: 2.0 },
-      { id: 'spd4', mult: 4.0 },
-      { id: 'spd8', mult: 8.0 }
-    ];
+    const speedOptions = [1, 2, 4, 8, 16];
 
-    speedButtons.forEach(sb => {
-      document.getElementById(sb.id).onclick = () => {
-        simSpeed = sb.mult;
-        speedButtons.forEach(b => document.getElementById(b.id).classList.remove('active'));
-        document.getElementById(sb.id).classList.add('active');
-      };
+    function setSimSpeed(multiplier) {
+      simSpeed = multiplier;
+      speedOptions.forEach(speed => {
+        document.getElementById(`spd${speed}`).classList.toggle('active', speed === simSpeed);
+      });
+    }
+
+    speedOptions.forEach(speed => {
+      document.getElementById(`spd${speed}`).onclick = () => setSimSpeed(speed);
     });
 
     const btnSelectRecon = document.getElementById('selectRecon');
@@ -3111,8 +3028,9 @@
       if (mode === 'orbit') {
         document.getElementById('camOrbit').classList.add('active');
         controls.enabled = true;
-        controls.target.set(3.0, 2.0, 0.4);
-        camera.position.set(3.0, -3.2, 3.8);
+        const distance = fieldViewDistance();
+        controls.target.set(FIELD_CENTER.x, FIELD_CENTER.y, 0.4);
+        camera.position.set(FIELD_CENTER.x, FIELD_CENTER.y - distance * 0.8, distance);
         controls.update();
       }
       if (mode === 'top') {
@@ -3383,9 +3301,9 @@
       if (finishedActionIds.has(target.actionId) || uncertainActionIds.has(target.actionId)) {
         return { allowed: false, reason: `повтор action_id ${target.actionId} запрещён` };
       }
-      const insideNfz = nfzZones.some(z =>
-        drone2State.x >= z.barrierMinX && drone2State.x <= z.barrierMaxX &&
-        drone2State.y >= z.barrierMinY && drone2State.y <= z.barrierMaxY
+      const insideNfz = nfzZones.some(({ barrier }) =>
+        drone2State.x >= barrier.minX && drone2State.x <= barrier.maxX &&
+        drone2State.y >= barrier.minY && drone2State.y <= barrier.maxY
       );
       if (insideNfz) {
         return { allowed: false, reason: 'позиция находится в расширенной запретной зоне' };
@@ -3512,6 +3430,7 @@
       const dist3D = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       if (dist3D < DRONE_COLLISION_DIST) {
+        const previous = [drone1State, drone2State].map(({ x, y }) => ({ x, y }));
         const overlap = DRONE_COLLISION_DIST - dist3D;
         const nx = (dist3D > 0.001) ? dx / dist3D : 1;
         const ny = (dist3D > 0.001) ? dy / dist3D : 0;
@@ -3535,6 +3454,13 @@
           drone2State.y -= ny * overlap * 0.5;
           drone2State.z -= nz * overlap * 0.5;
         }
+
+        [drone1State, drone2State].forEach((drone, i) => {
+          if (crossesNoFlyZone(previous[i], drone)) {
+            drone.x = previous[i].x;
+            drone.y = previous[i].y;
+          }
+        });
 
         const banner = document.getElementById('nfzBanner');
         banner.style.display = 'flex';
@@ -3560,17 +3486,19 @@
       }
 
       // 2. Обнаружение меток камерой БПЛА-1
-      if (st.role === 'recon' && (st.autoPilot || st.z > 0.15)) {
+      if (st.role === 'recon' && st.z > 0.15) {
+        const { x: w, y: d } = cameraFootprint(st.z);
         targetMeshes.forEach(tm => {
           const t = tm.data;
           if (!t.discovered) {
-            const { x: w, y: d } = cameraFootprint(Math.max(st.z, 0.10));
             const dx = Math.abs(st.x - t.x);
             const dy = Math.abs(st.y - t.y);
 
             // Цель гарантированно открывается в момент попадания в видимый световой конус камеры!
-            if (dx <= w + 0.12 && dy <= d + 0.12) {
+            if (dx <= w && dy <= d) {
               t.discovered = true;
+              tm.group.visible = true;
+              tm.sprite.visible = labelsVisible;
               let col = 0x22c55e;
               let title = `УЧАСТОК A-${t.id}`;
               let sub = 'Назначена учебная световая операция 2,0 с (R=0,25 м)';
@@ -3849,35 +3777,20 @@
         st.vy = (nextY - st.y) / dt;
       }
 
-      // Проверка барьеров NFZ
-      let collisionDetected = false;
-      if (st.z < NFZ_MAX_Z) {
-        nfzZones.forEach(z => {
-          if (nextX > z.barrierMinX && nextX < z.barrierMaxX &&
-              nextY > z.barrierMinY && nextY < z.barrierMaxY) {
-            
-            collisionDetected = true;
-            const dLeft = Math.abs(st.x - z.barrierMinX);
-            const dRight = Math.abs(st.x - z.barrierMaxX);
-            const dBottom = Math.abs(st.y - z.barrierMinY);
-            const dTop = Math.abs(st.y - z.barrierMaxY);
-            const minSide = Math.min(dLeft, dRight, dBottom, dTop);
-
-            if (minSide === dLeft) {
-              nextX = z.barrierMinX;
-              if (st.vx > 0) st.vx = 0;
-            } else if (minSide === dRight) {
-              nextX = z.barrierMaxX;
-              if (st.vx < 0) st.vx = 0;
-            } else if (minSide === dBottom) {
-              nextY = z.barrierMinY;
-              if (st.vy > 0) st.vy = 0;
-            } else {
-              nextY = z.barrierMaxY;
-              if (st.vy < 0) st.vy = 0;
-            }
+      // Проверяем весь шаг, чтобы даже диагональное движение не пересекало угол NFZ.
+      const collisionDetected = crossesNoFlyZone(st, { x: nextX, y: nextY });
+      if (collisionDetected) {
+        if (!crossesNoFlyZone(st, { x: nextX, y: st.y })) {
+          nextY = st.y;
+          st.vy = 0;
+        } else {
+          nextX = st.x;
+          st.vx = 0;
+          if (crossesNoFlyZone(st, { x: st.x, y: nextY })) {
+            nextY = st.y;
+            st.vy = 0;
           }
-        });
+        }
       }
 
       st.x = nextX;
@@ -4072,8 +3985,8 @@
         controls.target.copy(newTarget);
         controls.update();
       } else if (cameraMode === 'top') {
-        camera.position.set(3, 2, 7.8);
-        camera.lookAt(3, 2, 0);
+        camera.position.set(FIELD_CENTER.x, FIELD_CENTER.y, fieldViewDistance());
+        camera.rotation.set(0, 0, 0);
       } else if (cameraMode === 'fpv') {
         camera.position.set(activeDrone.x, activeDrone.y, activeDrone.z - 0.04);
         camera.lookAt(activeDrone.x, activeDrone.y, 0);
@@ -4148,7 +4061,9 @@
     if (btnLabelsToggle) {
       btnLabelsToggle.onclick = () => {
         labelsVisible = !labelsVisible;
-        allSceneLabels.forEach(s => s.visible = labelsVisible);
+        targetMeshes.forEach(({ sprite, data }) => {
+          sprite.visible = labelsVisible && data.discovered;
+        });
         btnLabelsToggle.classList.toggle('btn-active-toggle', labelsVisible);
       };
     }
@@ -4188,15 +4103,15 @@
     const btnCamClose = document.getElementById('camCloseTarget');
     if (btnCamClose) {
       btnCamClose.onclick = () => {
+        const scanned = targetMeshes.filter(({ data }) => data.discovered);
+        const targetA = scanned.find(({ data }) => data.type === 'A') || scanned[0];
+        if (!targetA) return;
         setCamMode('orbit');
         document.querySelectorAll('.btn-cam-mini').forEach(b => b.classList.remove('active'));
         btnCamClose.classList.add('active');
-        const targetA = targetMeshes.find(m => m.data.type === 'A') || targetMeshes[0];
-        if (targetA) {
-          controls.target.set(targetA.data.x, targetA.data.y, 0.15);
-          camera.position.set(targetA.data.x + 0.6, targetA.data.y - 0.7, 0.65);
-          controls.update();
-        }
+        controls.target.set(targetA.data.x, targetA.data.y, 0.15);
+        camera.position.set(targetA.data.x + 0.6, targetA.data.y - 0.7, 0.65);
+        controls.update();
       };
     }
 
@@ -4213,7 +4128,7 @@
     window.__MISSION_SMOKE_TEST__ = query.get('smoketest') === '1';
     if (query.get('autostart') === '1') {
       const requestedSpeed = Number(query.get('speed') || '8');
-      simSpeed = [1, 2, 4, 8].includes(requestedSpeed) ? requestedSpeed : 8;
+      setSimSpeed(speedOptions.includes(requestedSpeed) ? requestedSpeed : 8);
       setTimeout(() => document.getElementById('btnRunChain').click(), 250);
     }
     if (window.__MISSION_SMOKE_TEST__) {

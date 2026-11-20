@@ -1297,10 +1297,49 @@
         return { bounds, expanded, safePoint, clamp, shortestLeg };
       }
 
-      function plan({ width, height, clearance, obstacles, home, footprint, cells }) {
+      function repairPath({ from, waypoints, ...config }) {
+        const { expanded, safePoint, shortestLeg } = createRouter(config);
+        if (!safePoint(from)) return null;
+        const path = [];
+        let previousWaypoint = from;
+
+        function append(point, transitKind) {
+          const leg = shortestLeg(path.at(-1) ?? from, point);
+          if (!leg) return false;
+          path.push(...leg.slice(0, -1).map(p => ({ ...p, kind: transitKind })), point);
+          return true;
+        }
+
+        for (const point of waypoints) {
+          const { x, y } = previousWaypoint;
+          if (point.kind === 'survey' && y === point.y && x !== point.x &&
+              expanded.some(box => crossesInterior(previousWaypoint, point, box))) {
+            // Continue to the edge of each free span, then rejoin the same lane
+            // just beyond the obstacle instead of cutting to its far endpoint.
+            const backwards = x > point.x;
+            const spans = freeSpans(y, Math.min(x, point.x), Math.max(x, point.x), expanded);
+            if (backwards) spans.reverse();
+            for (const span of spans) {
+              const [start, end] = backwards ? [span[1], span[0]] : span;
+              const entry = { x: start, y, kind: 'detour' };
+              const current = path.at(-1) ?? from;
+              if ((entry.x === current.x && entry.y === current.y) || append(entry, 'detour')) {
+                append({ ...point, x: end }, 'detour');
+              }
+            }
+          } else {
+            const returning = point.kind === 'return' || point.kind === 'land';
+            if (!append(point, returning ? 'return' : 'detour') && point.kind === 'land') return null;
+          }
+          previousWaypoint = point;
+        }
+        return path;
+      }
+
+      function plan({ width, height, clearance, obstacles, home, footprint, cells, start = home, sweep = true }) {
         const { bounds, expanded, safePoint, clamp, shortestLeg } = createRouter({ width, height, clearance, obstacles });
-        if (!safePoint(home) || footprint.x <= clearance || footprint.y <= clearance) return null;
-        const path = [{ ...home, kind: 'takeoff' }];
+        if (!safePoint(home) || !safePoint(start) || footprint.x <= clearance || footprint.y <= clearance) return null;
+        const path = [{ x: start.x, y: start.y, kind: sweep ? 'takeoff' : 'transit' }];
         const pending = new Set(cells);
         const viewBox = p => ({
           minX: p.x - footprint.x, maxX: p.x + footprint.x,
@@ -1314,18 +1353,20 @@
           }
         }
 
-        // 20% перекрытия. Крайние галсы находятся у границ безопасной области.
-        const rowCount = Math.max(1, Math.ceil((bounds.maxY - bounds.minY) / (1.6 * footprint.y)));
-        for (let row = 0; row <= rowCount; row++) {
-          const y = bounds.minY + (bounds.maxY - bounds.minY) * (row / rowCount);
-          const spans = freeSpans(y, bounds.minX, bounds.maxX, expanded);
-          if (row % 2) spans.reverse();
-          for (const span of spans) {
-            const [start, end] = row % 2 ? [span[1], span[0]] : span;
-            const leg = shortestLeg(path[path.length - 1], { x: start, y });
-            if (!leg) continue;
-            for (const p of leg) append(p, 'transit');
-            append({ x: end, y }, 'survey');
+        if (sweep) {
+          // 20% перекрытия. Крайние галсы находятся у границ безопасной области.
+          const rowCount = Math.max(1, Math.ceil((bounds.maxY - bounds.minY) / (1.6 * footprint.y)));
+          for (let row = 0; row <= rowCount; row++) {
+            const y = bounds.minY + (bounds.maxY - bounds.minY) * (row / rowCount);
+            const spans = freeSpans(y, bounds.minX, bounds.maxX, expanded);
+            if (row % 2) spans.reverse();
+            for (const span of spans) {
+              const [start, end] = row % 2 ? [span[1], span[0]] : span;
+              const leg = shortestLeg(path[path.length - 1], { x: start, y });
+              if (!leg) continue;
+              for (const p of leg) append(p, 'transit');
+              append({ x: end, y }, 'survey');
+            }
           }
         }
 
@@ -1355,7 +1396,7 @@
         return { path, uncoveredCells: pending.size };
       }
 
-      return { plan, crossesInterior, createRouter };
+      return { plan, repairPath, crossesInterior, createRouter };
     })();
   </script>
   <script id="executor-routing">
@@ -2153,6 +2194,7 @@
 
     // Расчет достижимых клеток поля (без внутренних объемов NFZ)
     const isReachableGrid = new Uint8Array(SLAM_COLS * SLAM_ROWS);
+    const observedNfz = new Map();
     function recomputeReachableGrid() {
       totalReachableCells = 0;
       isReachableGrid.fill(0);
@@ -2217,9 +2259,15 @@
     
     // Функция сканирования сенсором камеры и заполнения SLAM-карты
     function updateSlamScan(px, py, pz) {
-      if (pz < 0.15) return;
-      // Реальная зона обзора камеры: полуразмеры проекции конуса на земле (угол FOV ~80°)
+      if (pz < 0.15) return false;
       const { x: w, y: d } = cameraFootprint(pz);
+      const previousObstacleCount = observedNfz.size;
+      for (const { id, cx, cy, w: width, h: height } of nfzZones) {
+        if (!observedNfz.has(id) && Math.abs(px - cx) <= w + width / 2 &&
+            Math.abs(py - cy) <= d + height / 2) {
+          observedNfz.set(id, { cx, cy, w: width, h: height });
+        }
+      }
       const firstCol = Math.max(0, Math.ceil((px - w) / SLAM_RES - 0.5));
       const lastCol = Math.min(SLAM_COLS - 1, Math.floor((px + w) / SLAM_RES - 0.5));
       const firstRow = Math.max(0, Math.ceil((py - d) / SLAM_RES - 0.5));
@@ -2257,6 +2305,7 @@
         const badge = document.getElementById('slamCoverageBadge');
         if (badge) badge.textContent = `ПОКРЫТИЕ: ${slamCoverage.toFixed(1)}%`;
       }
+      return observedNfz.size !== previousObstacleCount;
     }
 
     // Отрисовка 2D-карты SLAM на HTML5 Canvas
@@ -2411,6 +2460,7 @@
 
       // Сброс SLAM-сетки и покрытия при генерации новой карты
       slamGrid.fill(0);
+      observedNfz.clear();
       slamTerrainCtx.clearRect(0, 0, SLAM_COLS, SLAM_ROWS);
       slamCoverage = 0;
       scannedReachableCells = 0;
@@ -2562,7 +2612,8 @@
       drone1State.memory = [];
       updateHUDDiscoveredCount(0);
 
-      drone1State.waypoints = generateBoustrophedonReconPath();
+      drone1State.waypoints = generateReconSweep();
+      drone1State.coverageChecked = false;
     }
 
     // --- МОДЕЛИРОВАНИЕ ДВУХ БПЛА ---
@@ -2829,61 +2880,99 @@
     scene.add(drone1Obj.group);
     scene.add(drone2Obj.group);
 
-    function generateBoustrophedonReconPath() {
-      const cells = [];
-      isReachableGrid.forEach((reachable, index) => {
-        if (reachable) cells.push({
-          x: (index % SLAM_COLS + 0.5) * SLAM_RES,
-          y: (Math.floor(index / SLAM_COLS) + 0.5) * SLAM_RES
-        });
-      });
+    function reconRouterConfig() {
+      return {
+        width: FIELD_WIDTH, height: FIELD_HEIGHT,
+        clearance: ROUTE_CLEARANCE, obstacles: [...observedNfz.values()]
+      };
+    }
+
+    function reconSurveyConfig() {
       const footprint = cameraFootprint(ALT_MIN);
       // Запас на расстояние между двумя кадрами при максимальном шаге физики.
       const frameGap = MAX_SPEED * MAX_PHYSICS_STEP;
-      const plan = ReconSurvey.plan({
-        width: FIELD_WIDTH, height: FIELD_HEIGHT, clearance: ROUTE_CLEARANCE,
-        obstacles: nfzZones, home: RECON_HOME, cells,
+      return {
+        ...reconRouterConfig(), home: RECON_HOME,
         footprint: { x: footprint.x - frameGap, y: footprint.y - frameGap }
+      };
+    }
+
+    function reconWaypoint(point) {
+      return { ...point, z: point.kind === 'land' ? 0.08 : NOMINAL_ALT };
+    }
+
+    function generateReconSweep() {
+      const plan = ReconSurvey.plan({ ...reconSurveyConfig(), cells: [] });
+      return plan?.path.map(reconWaypoint) ?? [];
+    }
+
+    function planRemainingCoverage(from) {
+      const config = reconSurveyConfig();
+      const cells = [];
+      slamGrid.forEach((value, index) => {
+        if (value !== 0) return;
+        const x = (index % SLAM_COLS + 0.5) * SLAM_RES;
+        const y = (Math.floor(index / SLAM_COLS) + 0.5) * SLAM_RES;
+        if (!config.obstacles.some(z => Math.abs(x - z.cx) <= z.w / 2 && Math.abs(y - z.cy) <= z.h / 2)) {
+          cells.push({ x, y });
+        }
       });
-      return plan ? plan.path.map(p => ({ ...p, z: p.kind === 'land' ? 0.08 : NOMINAL_ALT })) : [];
+      if (!cells.length) return;
+      const plan = ReconSurvey.plan({ ...config, start: from, cells, sweep: false });
+      replaceReconTail(from, plan?.path.slice(1));
+    }
+
+    function replaceReconTail(state, path) {
+      if (path?.length) {
+        const current = { x: state.x, y: state.y, z: state.z };
+        state.waypoints = [...state.waypoints.slice(0, state.autoIdx), current, ...path.map(reconWaypoint)];
+        state.autoIdx++;
+      } else {
+        state.waypoints = [];
+        state.autoPilot = false;
+        state.vx = state.vy = 0;
+        state.targetZ = state.z;
+        state.fsm = 'RECON_BLOCKED';
+        chainRunning = false;
+        document.getElementById('btnRunChain').textContent = 'Повторить разведку';
+        showPhaseBanner('Разведчик остановился: безопасный маршрут к базе не найден.');
+      }
+      if (activeDroneId === 1) updateRouteLine(state.waypoints);
     }
 
     let routeLine = null;
     let routeNodes = [];
     let routeVisible = true;
+    const routeLineMaterial = new THREE.LineBasicMaterial({
+      color: 0x22c55e, linewidth: 3, transparent: true, opacity: 0.85
+    });
+    const routeNodeMaterial = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const routeNodeGeometry = new THREE.SphereGeometry(0.025, 12, 12);
 
     function updateRouteLine(waypoints) {
-      if (routeLine) scene.remove(routeLine);
-      routeNodes.forEach(n => scene.remove(n));
+      if (routeLine) {
+        scene.remove(routeLine);
+        routeLine.geometry.dispose();
+        routeLine = null;
+      }
+      scene.remove(...routeNodes);
       routeNodes = [];
 
-      if (!waypoints || waypoints.length === 0) return;
+      if (waypoints.length === 0) return;
 
-      const routePoints = [];
-      waypoints.forEach(wp => {
-        routePoints.push(new THREE.Vector3(wp.x, wp.y, wp.z));
-      });
-
-      const routeGeo = new THREE.BufferGeometry().setFromPoints(routePoints);
-      const routeMat = new THREE.LineBasicMaterial({
-        color: 0x22c55e,
-        linewidth: 3,
-        transparent: true,
-        opacity: 0.85
-      });
-      routeLine = new THREE.Line(routeGeo, routeMat);
+      const points = waypoints.map(wp => new THREE.Vector3(wp.x, wp.y, wp.z));
+      const routeGeometry = new THREE.BufferGeometry().setFromPoints(points);
+      routeLine = new THREE.Line(routeGeometry, routeLineMaterial);
       routeLine.visible = routeVisible;
       scene.add(routeLine);
 
-      const routeNodeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-      waypoints.forEach((wp, idx) => {
-        if (idx > 0 && idx < waypoints.length - 1) {
-          const nodeMesh = new THREE.Mesh(new THREE.SphereGeometry(0.025, 12, 12), routeNodeMat);
-          nodeMesh.position.set(wp.x, wp.y, wp.z);
-          scene.add(nodeMesh);
-          routeNodes.push(nodeMesh);
-        }
-      });
+      for (const point of points.slice(1, -1)) {
+        const node = new THREE.Mesh(routeNodeGeometry, routeNodeMaterial);
+        node.position.copy(point);
+        node.visible = routeVisible;
+        scene.add(node);
+        routeNodes.push(node);
+      }
     }
 
     function planExecutorMissionFromMemory() {
@@ -2919,6 +3008,7 @@
       autoPilot: false,
       waypoints: [],
       autoIdx: 0,
+      coverageChecked: false,
       memory: []
     };
 
@@ -2943,6 +3033,7 @@
     // Первичная рандомизация карты целей и генерация маршрута
     generateRandomTargets();
     planExecutorMissionFromMemory();
+    updateRouteLine(drone1State.waypoints);
 
     let activeDrone = drone1State;
     let activeDroneObj = drone1Obj;
@@ -3007,6 +3098,7 @@
         document.getElementById('activeDroneName').textContent = 'БПЛА-2 (Исполнитель)';
         document.getElementById('activeDroneName').style.color = '#86efac';
       }
+      updateRouteLine(activeDrone.waypoints);
     }
 
     btnSelectRecon.onclick = () => setActiveDrone(1);
@@ -3188,7 +3280,8 @@
     if (btnToggleRoute) {
       btnToggleRoute.onclick = () => {
       routeVisible = !routeVisible;
-      routeLine.visible = routeVisible;
+      if (routeLine) routeLine.visible = routeVisible;
+      routeNodes.forEach(node => { node.visible = routeVisible; });
       if (routeVisible) {
         btnToggleRoute.className = 'btn btn-active-toggle';
         btnToggleRoute.textContent = '🗺️ Траектория обхода NFZ: ВКЛ';
@@ -3254,7 +3347,7 @@
 
       generateRandomTargets();
       planExecutorMissionFromMemory();
-      if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
+      if (activeDroneId === 1) updateRouteLine(drone1State.waypoints);
 
       trailCount = 0;
       trailGeo.setDrawRange(0, 0);
@@ -3269,7 +3362,7 @@
       }
       generateRandomTargets();
       planExecutorMissionFromMemory();
-      if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
+      if (activeDroneId === 1) updateRouteLine(drone1State.waypoints);
       showDiscoveryToast({
         type: 'A',
         name: 'Новые препятствия NFZ и цели сгенерированы!',
@@ -3381,7 +3474,6 @@
       drone1State.discoveredCount = 0;
       updateHUDDiscoveredCount(0);
       planExecutorMissionFromMemory();
-      if (activeDroneId === 1 && routeVisible) updateRouteLine(drone1State.waypoints);
 
       chainRunning = true;
       chainStage = 1;
@@ -3479,8 +3571,22 @@
 
       // 1. Непрерывное сканирование поля сенсором камеры и закрашивание 2D SLAM-карты
       if (st.role === 'recon' && (st.autoPilot || st.z > 0.15)) {
-        updateSlamScan(st.x, st.y, st.z);
+        const foundObstacle = updateSlamScan(st.x, st.y, st.z);
         if (obj.cameraFrustum) obj.cameraFrustum.visible = true;
+        if (st.autoPilot && foundObstacle) {
+          const path = ReconSurvey.repairPath({
+            ...reconRouterConfig(), from: st, waypoints: st.waypoints.slice(st.autoIdx)
+          });
+          replaceReconTail(st, path);
+          if (st.autoPilot) {
+            showPhaseBanner(`ЭТАП 1: разведчик обновил маршрут. Обнаружено запретных зон: ${observedNfz.size}.`);
+          }
+        }
+        const next = st.waypoints[st.autoIdx];
+        if (st.autoPilot && !st.coverageChecked && (next?.kind === 'return' || next?.kind === 'land')) {
+          st.coverageChecked = true;
+          planRemainingCoverage(st);
+        }
       } else if (st.role === 'recon' && st.z <= 0.12 && !st.autoPilot) {
         if (obj.cameraFrustum) obj.cameraFrustum.visible = false;
       }
@@ -3628,7 +3734,8 @@
             }
           }
           const phase = st.role === 'executor' ? 'EXEC_NAV' :
-            (wp.kind === 'survey' || wp.kind === 'fill' ? 'RECON_SCAN' : 'RECON_NAV');
+            (wp.kind === 'detour' ? 'RECON_AVOID' :
+              wp.kind === 'survey' || wp.kind === 'fill' ? 'RECON_SCAN' : 'RECON_NAV');
           st.fsm = `${phase}_${st.autoIdx + 1}/${st.waypoints.length}`;
         } else {
           if (wp.action) {

@@ -7,7 +7,7 @@ const { runInThisContext } = require('node:vm');
 const html = readFileSync(join(__dirname, '../simulation_3d/index.html'), 'utf8');
 const planner = html.match(/<script id="recon-survey">([\s\S]*?)<\/script>/);
 assert.ok(planner, 'the survey planner must be bundled with the page');
-const { plan, crossesInterior } = runInThisContext(
+const { plan, repairPath, crossesInterior } = runInThisContext(
   '(function () {' + planner[1] + '\nreturn ReconSurvey;\n})()',
   { filename: 'index.html#recon-survey' }
 );
@@ -71,4 +71,69 @@ test('fills a gap missed by the main passes around an obstacle', () => {
 test('rejects a base inside the required obstacle clearance', () => {
   const obstacles = [{ cx: 0.65, cy: 0.45, w: 0.3, h: 0.3 }];
   assert.equal(plan({ ...config, obstacles }), null);
+});
+
+test('the sweep stays straight until a zone is seen, then rejoins just beyond it in either direction', () => {
+  const obstacle = { cx: 3, cy: 2, w: 1, h: 1 };
+  const box = { minX: 2.25, maxX: 3.75, minY: 1.25, maxY: 2.75 };
+
+  for (const [x, destination, entry, exit] of [[1, 5.75, 2.25, 3.75], [5, 0.25, 3.75, 2.25]]) {
+    const from = { x, y: 2 };
+    const end = { x: destination, y: 2, kind: 'survey' };
+    const opts = { ...config, from, waypoints: [end] };
+    assert.deepEqual(repairPath({ ...opts, obstacles: [] }), [end]);
+    const detour = repairPath({ ...opts, obstacles: [obstacle] });
+    assert.equal(detour[0].x, entry);
+    assert.equal(detour[0].y, from.y);
+    assert.equal(detour.at(-2).x, exit);
+    assert.equal(detour.at(-2).y, from.y);
+    assert.deepEqual(detour.at(-1), end);
+    assert.ok(detour.some(p => p.y !== from.y));
+    assert.ok(detour.every((p, i) => !crossesInterior(detour[i - 1] ?? from, p, box)));
+  }
+});
+
+test('a second discovery during a detour preserves the safe approach and the original sweep endpoint', () => {
+  const first = { cx: 2.5, cy: 2, w: 1, h: 1 };
+  const second = { cx: 4.5, cy: 2, w: 0.5, h: 1 };
+  const end = { x: 5.75, y: 2, kind: 'survey' };
+  const initial = repairPath({ ...config, from: { x: 1, y: 2 }, waypoints: [end], obstacles: [first] });
+  const from = initial[1];
+  const detour = repairPath({ ...config, from, waypoints: initial.slice(2), obstacles: [first, second] });
+  assert.deepEqual(detour.at(-1), end);
+  assert.ok(detour.some(p => p.x === 5 && p.y === 2));
+  for (const ob of [first, second]) {
+    const box = { minX: ob.cx - ob.w / 2 - 0.25, maxX: ob.cx + ob.w / 2 + 0.25,
+      minY: ob.cy - ob.h / 2 - 0.25, maxY: ob.cy + ob.h / 2 + 0.25 };
+    assert.ok(detour.every((p, i) => !crossesInterior(detour[i - 1] ?? from, p, box)));
+  }
+});
+
+test('a late obstacle redirects the return leg and still reaches the original landing point', () => {
+  const obstacle = { cx: 3, cy: 2, w: 1, h: 1 };
+  const from = { x: 5, y: 3 };
+  const waypoints = [{ x: 3, y: 2, kind: 'return' },
+    { ...config.home, kind: 'return' }, { ...config.home, kind: 'land' }];
+  const path = repairPath({ ...config, from, waypoints, obstacles: [obstacle] });
+  assert.deepEqual(path.slice(-2), waypoints.slice(-2));
+  assert.ok(path.slice(0, -1).every(point => point.kind === 'return'));
+  const box = { minX: 2.25, maxX: 3.75, minY: 1.25, maxY: 2.75 };
+  assert.ok(path.every((p, i) => !crossesInterior(path[i - 1] ?? from, p, box)));
+});
+
+test('an unreachable landing point cannot produce a route', () => {
+  const obstacle = { cx: 3, cy: 2, w: 0.5, h: 4 };
+  const from = { x: 5, y: 2 };
+  const waypoints = [{ ...config.home, kind: 'return' }, { ...config.home, kind: 'land' }];
+  assert.equal(repairPath({ ...config, from, waypoints, obstacles: [obstacle] }), null);
+});
+
+test('coverage passes start at the current position and return home without restarting the sweep', () => {
+  const start = { x: 5, y: 3 };
+  const result = plan({ ...config, obstacles: [], cells: [{ x: 4.5, y: 1.5 }], start, sweep: false });
+  assert.deepEqual(result.path[0], { ...start, kind: 'transit' });
+  assert.ok(result.path.some(point => point.kind === 'fill'));
+  assert.ok(result.path.every(point => point.kind !== 'survey'));
+  assert.deepEqual(result.path.at(-1), { ...config.home, kind: 'land' });
+  assert.equal(result.uncoveredCells, 0);
 });
